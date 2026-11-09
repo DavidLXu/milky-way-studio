@@ -44,6 +44,7 @@ final class GalaxyEngine {
 
     var scenePipeline: MTLRenderPipelineState!
     var blackHolePipeline: MTLRenderPipelineState!
+    var solarPipeline: MTLRenderPipelineState!
     var starPipeline: MTLRenderPipelineState!
     var bloomPipeline: MTLRenderPipelineState!
     var compositePipeline8: MTLRenderPipelineState!
@@ -129,6 +130,7 @@ final class GalaxyEngine {
         self.accumFormat = chosenFormat
         self.scenePipeline = scene
         self.blackHolePipeline = try makeRenderPipeline("fullscreen_vertex", "blackhole_fragment", chosenFormat, blending: true)
+        self.solarPipeline = try makeRenderPipeline("fullscreen_vertex", "solar_fragment", chosenFormat, blending: true)
         self.starPipeline = try makeRenderPipeline("star_vertex", "star_fragment", chosenFormat, blending: true)
         self.bloomPipeline = try makeRenderPipeline("fullscreen_vertex", "bloom_fragment", .rgba16Float, blending: false)
         self.compositePipeline8 = try makeRenderPipeline("fullscreen_vertex", "composite_fragment", .bgra8Unorm, blending: false)
@@ -461,11 +463,24 @@ final class GalaxyEngine {
         u.params0 = SIMD4<Float>(Float(settings.dust), settings.steps >= 256 ? 1 : 0, settings.shearEnabled ? 1 : 0, settings.dustHighEnabled ? 1 : 0)
         u.params1 = SIMD4<Float>(Float(settings.exposure), settings.starDynamicsEnabled ? 1 : 0, 0, 0)
         u.params2 = SIMD4<Float>(Float(settings.steps), Float(sampleIndex), Float(settings.seed), 0)
-        u.params3 = SIMD4<Float>(Float(settings.bhTemp),
-                                 Float(settings.bhBrightness),
-                                 Float(settings.bhDiskOuter),
-                                 settings.bhDoppler ? 1 : 0)
-        u.params4 = SIMD4<Float>(settings.bhJets ? 1 : 0, 0, 0, 0)
+        if settings.mode == .solarSystem {
+            u.params3 = SIMD4<Float>(Float(settings.solarPlanetScale),
+                                     settings.solarOrbitLines ? 1 : 0,
+                                     settings.solarBelts ? 1 : 0,
+                                     settings.solarMoons ? 1 : 0)
+            let auPerPixel = Float(2.0 * settings.distance *
+                                   tan(settings.fov * .pi / 360.0) /
+                                   Double(max(height, 1)))
+            u.params4 = SIMD4<Float>(Float(max(0.0012, settings.distance * 0.00045)),
+                                     1.0, auPerPixel, 0)
+        } else {
+            u.params3 = SIMD4<Float>(Float(settings.bhTemp),
+                                     Float(settings.bhBrightness),
+                                     Float(settings.bhDiskOuter),
+                                     settings.bhDoppler ? 1 : 0)
+            u.params4 = SIMD4<Float>(settings.bhJets ? 1 : 0,
+                                     Float(settings.bhThickness), 0, 0)
+        }
         return u
     }
 
@@ -495,12 +510,24 @@ final class GalaxyEngine {
 
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else { return }
         let isBlackHole = settings.mode == .blackHole
-        encoder.label = isBlackHole ? "Black hole geodesic trace" : "Galaxy ray march"
-        encoder.setRenderPipelineState(isBlackHole ? blackHolePipeline : scenePipeline)
-        if !isBlackHole {
+        let isSolar = settings.mode == .solarSystem
+        encoder.label = isBlackHole ? "Black hole geodesic trace" :
+                        (isSolar ? "Solar system ray trace" : "Galaxy ray march")
+        encoder.setRenderPipelineState(isBlackHole ? blackHolePipeline :
+                                       (isSolar ? solarPipeline : scenePipeline))
+        if !isBlackHole && !isSolar {
             encoder.setFragmentTexture(galaxyTexture, index: 0)
             encoder.setFragmentTexture(detailTexture, index: 1)
             encoder.setFragmentTexture(dustHighTexture, index: 2)
+        }
+        if isSolar {
+            let planets = SolarSystem.renderPlanets(days: settings.time,
+                                                    scale: settings.solarPlanetScale)
+            planets.withUnsafeBytes { raw in
+                if let base = raw.baseAddress {
+                    encoder.setFragmentBytes(base, length: raw.count, index: 1)
+                }
+            }
         }
         encoder.setViewport(MTLViewport(originX: 0, originY: 0,
                                         width: Double(target.width), height: Double(target.height),
@@ -517,7 +544,7 @@ final class GalaxyEngine {
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         }
 
-        if !isBlackHole && stars && starCount > 0 && starBuffer != nil {
+        if !isBlackHole && !isSolar && stars && starCount > 0 && starBuffer != nil {
             encoder.setRenderPipelineState(starPipeline)
             encoder.setVertexBuffer(starBuffer, offset: 0, index: 0)
             encoder.setVertexTexture(galaxyTexture, index: 0)

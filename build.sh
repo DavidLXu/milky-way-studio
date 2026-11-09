@@ -18,6 +18,7 @@ swiftc -O -whole-module-optimization -parse-as-library -swift-version 5 \
   Sources/App.swift \
   Sources/Palette.swift \
   Sources/AstroModel.swift \
+  Sources/SolarSystem.swift \
   Sources/ShaderTypes.swift \
   Sources/GalaxyEngine.swift \
   Sources/ImageExporter.swift \
@@ -31,7 +32,7 @@ swiftc -O -whole-module-optimization -parse-as-library -swift-version 5 \
 
 echo "==> Compiling CLI renderer"
 swiftc -O -swift-version 5 -module-cache-path build/cache \
-  Sources/AstroModel.swift Sources/ShaderTypes.swift Sources/GalaxyEngine.swift Sources/ImageExporter.swift Sources/CLI/main.swift \
+  Sources/AstroModel.swift Sources/SolarSystem.swift Sources/ShaderTypes.swift Sources/GalaxyEngine.swift Sources/ImageExporter.swift Sources/CLI/main.swift \
   -o build/galaxycli \
   -framework Metal -framework Foundation -framework ImageIO -framework CoreGraphics -framework UniformTypeIdentifiers
 

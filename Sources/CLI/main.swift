@@ -20,6 +20,21 @@ let height = max(200, intValue("--height", 1000))
 let samples = max(1, intValue("--samples", 16))
 
 var settings = RenderSettings()
+if args.contains("--solar") {
+    settings.mode = .solarSystem
+    settings.azimuth = 35
+    settings.elevation = 28
+    settings.distance = 18
+    settings.fov = 42
+    settings.starLayerEnabled = false
+    settings.dustHighEnabled = false
+    settings.solarOrbitLines = !args.contains("--no-orbits")
+    settings.solarBelts = !args.contains("--no-belts")
+    settings.solarMoons = !args.contains("--no-moons")
+    settings.solarPlanetScale = doubleValue("--planet-scale", 1.0)
+    settings.solarExposure = doubleValue("--solar-exposure", -0.3)
+    settings.solarBloom = doubleValue("--bloom", 0.28)
+}
 settings.azimuth = doubleValue("--az", settings.azimuth)
 settings.elevation = doubleValue("--el", settings.elevation)
 settings.distance = doubleValue("--dist", settings.distance)
@@ -31,8 +46,11 @@ settings.bloom = doubleValue("--bloom", settings.bloom)
 settings.steps = max(32, intValue("--steps", 128))
 settings.seed = UInt32(max(0, intValue("--seed", 1)))
 settings.autoRotate = false
-settings.starLayerEnabled = !args.contains("--no-stars")
-settings.dustHighEnabled = !args.contains("--no-highdust")
+settings.starLayerEnabled = settings.mode == .solarSystem ? false : !args.contains("--no-stars")
+settings.dustHighEnabled = settings.mode == .solarSystem ? false : !args.contains("--no-highdust")
+if settings.mode == .solarSystem {
+    settings.exposure = doubleValue("--exposure", settings.solarExposure)
+}
 if args.contains("--blackhole") {
     settings.mode = .blackHole
     settings.starLayerEnabled = false
@@ -43,6 +61,7 @@ if args.contains("--blackhole") {
     settings.bhDoppler = !args.contains("--no-doppler")
     settings.bhJets = args.contains("--jets")
     settings.bhSoftness = doubleValue("--bh-soft", 1.6)
+    settings.bhThickness = doubleValue("--bh-thickness", 0.25)
 }
 
 do {

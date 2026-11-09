@@ -111,6 +111,39 @@ enum BHPreset: String, CaseIterable, Identifiable {
     }
 }
 
+enum SolarPreset: String, CaseIterable, Identifiable {
+    case inner
+    case system
+    case topDown
+    case outer
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .inner: return "内行星"
+        case .system: return "全景"
+        case .topDown: return "俯视"
+        case .outer: return "外行星"
+        }
+    }
+    var subtitle: String {
+        switch self {
+        case .inner: return "水星 — 火星"
+        case .system: return "类地 + 巨行星"
+        case .topDown: return "轨道平面"
+        case .outer: return "木星 — 海王星"
+        }
+    }
+    var values: (azimuth: Double, elevation: Double, distance: Double, fov: Double) {
+        switch self {
+        case .inner: return (35, 24, 3.2, 44)
+        case .system: return (35, 28, 18, 42)
+        case .topDown: return (35, 78, 24, 40)
+        case .outer: return (35, 30, 38, 42)
+        }
+    }
+}
+
 final class StudioState: ObservableObject {
     @Published var mode: SceneMode = .galaxy
 
@@ -145,6 +178,15 @@ final class StudioState: ObservableObject {
     @Published var bhDoppler: Bool = true
     @Published var bhJets: Bool = false
     @Published var bhSoftness: Double = 3.0
+    @Published var bhThickness: Double = 0.25
+
+    // Solar system
+    @Published var solarPlanetScale: Double = 1.7
+    @Published var solarOrbitLines: Bool = true
+    @Published var solarBelts: Bool = true
+    @Published var solarMoons: Bool = true
+    @Published var solarExposure: Double = -0.3
+    @Published var solarBloom: Double = 0.28
 
     // Preview
     @Published var previewQuality: PreviewQuality = .balanced
@@ -196,6 +238,11 @@ final class StudioState: ObservableObject {
         s.bhDoppler = bhDoppler
         s.bhJets = bhJets
         s.bhSoftness = bhSoftness
+        s.bhThickness = bhThickness
+        s.solarPlanetScale = solarPlanetScale
+        s.solarOrbitLines = solarOrbitLines
+        s.solarBelts = solarBelts
+        s.solarMoons = solarMoons
 
         if mode == .blackHole {
             s.starLayerEnabled = false
@@ -206,6 +253,15 @@ final class StudioState: ObservableObject {
             s.previewScale = 0.50
             s.previewSamples = 48
             s.previewSPP = 1
+        } else if mode == .solarSystem {
+            s.starLayerEnabled = false
+            s.dustHighEnabled = false
+            s.exposure = solarExposure
+            s.bloom = solarBloom
+            s.steps = 64
+            s.previewScale = previewQuality.scale
+            s.previewSamples = 64
+            s.previewSPP = 2
         } else {
             s.starLayerEnabled = starLayerEnabled
             s.dustHighEnabled = dustHighEnabled && !autoRotate
@@ -220,7 +276,18 @@ final class StudioState: ObservableObject {
     }
 
     init() {
-        if mode == .blackHole {
+        if ProcessInfo.processInfo.arguments.contains("--solar") {
+            mode = .solarSystem
+            azimuth = 35
+            elevation = 28
+            distance = 18
+            fov = 42
+            autoRotate = true
+            rotationSpeed = 60
+            solarExposure = -0.3
+            solarBloom = 0.28
+            showIntroOverlay = false
+        } else if mode == .blackHole {
             azimuth = 34
             elevation = 6
             distance = 27
@@ -234,6 +301,10 @@ final class StudioState: ObservableObject {
     var cameraSummary: String {
         if mode == .blackHole {
             return String(format: "%02.0f° / %02.0f°  ·  %.0f Rs  ·  %.0f° FOV",
+                          azimuth, elevation, distance, fov)
+        }
+        if mode == .solarSystem {
+            return String(format: "%02.0f° / %02.0f°  ·  %.1f AU  ·  %.0f° FOV",
                           azimuth, elevation, distance, fov)
         }
         return String(format: "%02.0f° / %02.0f°  ·  %.0f kpc  ·  %.0f° FOV",
@@ -258,12 +329,21 @@ final class StudioState: ObservableObject {
             distance = 27
             fov = 32
             autoRotate = false
+            rotationSpeed = 6
+        } else if newMode == .solarSystem {
+            azimuth = 35
+            elevation = 28
+            distance = 18
+            fov = 42
+            autoRotate = true
+            rotationSpeed = 60
         } else {
             azimuth = 34
             elevation = 36
             distance = 54
             fov = 38
             autoRotate = true
+            rotationSpeed = 6
         }
         resetEvolution()
         showIntroOverlay = false
@@ -272,6 +352,16 @@ final class StudioState: ObservableObject {
     func applyBlackHolePreset(_ preset: BHPreset) {
         let v = preset.values
         withAnimation(.easeInOut(duration: 0.6)) {
+            azimuth = v.azimuth
+            elevation = v.elevation
+            distance = v.distance
+            fov = v.fov
+        }
+    }
+
+    func applySolarPreset(_ preset: SolarPreset) {
+        let v = preset.values
+        withAnimation(.easeInOut(duration: 0.65)) {
             azimuth = v.azimuth
             elevation = v.elevation
             distance = v.distance
@@ -292,15 +382,29 @@ final class StudioState: ObservableObject {
     func orbit(dx: CGFloat, dy: CGFloat) {
         azimuth += Double(dx) * 0.22
         elevation = min(85, max(2, elevation + Double(dy) * 0.20))
-        if autoRotate {
-            // Dragging implies manual control; keep the pattern animation off
-            // so the user can compose a still.
+        if autoRotate && mode != .solarSystem {
+            // For the galaxy/black hole, dragging implies manual control.
+            // In the solar system the clock should keep running while the
+            // camera is orbited.
             autoRotate = false
         }
     }
 
     func zoom(delta: CGFloat) {
-        distance = min(92, max(24, distance * exp(-Double(delta) * 0.012)))
+        let lower: Double
+        let upper: Double
+        switch mode {
+        case .solarSystem:
+            lower = 0.7
+            upper = 62
+        case .blackHole:
+            lower = 8
+            upper = 48
+        case .galaxy:
+            lower = 24
+            upper = 92
+        }
+        distance = min(upper, max(lower, distance * exp(-Double(delta) * 0.012)))
     }
 
     func resetEvolution() {
@@ -310,10 +414,23 @@ final class StudioState: ObservableObject {
     }
 
     func resetCamera() {
-        azimuth = 34
-        elevation = 36
-        distance = 54
-        fov = 38
+        switch mode {
+        case .solarSystem:
+            azimuth = 35
+            elevation = 28
+            distance = 18
+            fov = 42
+        case .blackHole:
+            azimuth = 34
+            elevation = 6
+            distance = 27
+            fov = 32
+        case .galaxy:
+            azimuth = 34
+            elevation = 36
+            distance = 54
+            fov = 38
+        }
     }
 
     func requestFinal(url: URL) {

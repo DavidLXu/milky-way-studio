@@ -39,14 +39,24 @@ struct StarParticle {
 enum SceneMode: String, CaseIterable, Identifiable {
     case galaxy
     case blackHole
+    case solarSystem
 
     var id: String { rawValue }
     var title: String {
         switch self {
         case .galaxy: return "MILKY WAY"
         case .blackHole: return "BLACK HOLE"
+        case .solarSystem: return "SOLAR SYSTEM"
         }
     }
+}
+
+/// Must match `struct SolarPlanet` in Shaders.metal.
+struct SolarPlanetGPU {
+    var posRadius = SIMD4<Float>(0, 0, 0, 0)
+    var color = SIMD4<Float>(0, 0, 0, 0)
+    var orbit = SIMD4<Float>(0, 0, 0, 0)
+    var flags = SIMD4<Float>(0, 0, 0, 0)
 }
 
 struct RenderSettings: Equatable {
@@ -87,6 +97,15 @@ struct RenderSettings: Equatable {
     var bhDoppler: Bool = true
     var bhJets: Bool = false
     var bhSoftness: Double = 1.6
+    var bhThickness: Double = 0.25
+
+    // Solar system
+    var solarPlanetScale: Double = 1.0
+    var solarOrbitLines: Bool = true
+    var solarBelts: Bool = true
+    var solarMoons: Bool = true
+    var solarExposure: Double = 0.0
+    var solarBloom: Double = 0.38
 }
 
 struct SceneKey: Equatable {
@@ -108,6 +127,11 @@ struct SceneKey: Equatable {
     var bhDoppler: Bool
     var bhJets: Bool
     var bhSoftness: Double
+    var bhThickness: Double
+    var solarPlanetScale: Double
+    var solarOrbitLines: Bool
+    var solarBelts: Bool
+    var solarMoons: Bool
     var width: Int
     var height: Int
 
@@ -130,6 +154,11 @@ struct SceneKey: Equatable {
         self.bhDoppler = settings.bhDoppler
         self.bhJets = settings.bhJets
         self.bhSoftness = settings.bhSoftness
+        self.bhThickness = settings.bhThickness
+        self.solarPlanetScale = settings.solarPlanetScale
+        self.solarOrbitLines = settings.solarOrbitLines
+        self.solarBelts = settings.solarBelts
+        self.solarMoons = settings.solarMoons
         self.width = width
         self.height = height
     }
@@ -145,7 +174,13 @@ struct CameraBasis {
     static func make(settings: RenderSettings, aspect: Double) -> CameraBasis {
         let az = settings.azimuth * .pi / 180.0
         let el = max(-84.0, min(84.0, settings.elevation)) * .pi / 180.0
-        let d = max(8.0, settings.distance)
+        let minimumDistance: Double
+        switch settings.mode {
+        case .galaxy: minimumDistance = 24.0
+        case .blackHole: minimumDistance = 8.0
+        case .solarSystem: minimumDistance = 0.65
+        }
+        let d = max(minimumDistance, settings.distance)
 
         let eye = SIMD3<Double>(
             d * cos(el) * sin(az),

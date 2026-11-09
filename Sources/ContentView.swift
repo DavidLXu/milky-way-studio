@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import simd
 
 struct ContentView: View {
     @StateObject private var state = StudioState()
@@ -81,6 +82,9 @@ struct SidebarView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if state.mode == .blackHole {
                         blackHoleSection
+                    } else if state.mode == .solarSystem {
+                        solarViewSection
+                        solarSection
                     } else {
                         viewSection
                         galaxySection
@@ -111,10 +115,12 @@ struct SidebarView: View {
         HStack(spacing: 11) {
             GalaxyMark(scale: 0.92)
             VStack(alignment: .leading, spacing: 2) {
-                Text(state.mode == .blackHole ? "Event Horizon" : "Milky Way")
+                Text(state.mode == .blackHole ? "Event Horizon" :
+                     (state.mode == .solarSystem ? "Solar System" : "Milky Way"))
                     .font(.system(size: 24, weight: .light, design: .serif))
                     .foregroundColor(Palette.ink)
-                Text(state.mode == .blackHole ? "SCHWARZSCHILD RAY TRACER" : "GALACTIC VOLUME RENDERER")
+                Text(state.mode == .blackHole ? "SCHWARZSCHILD RAY TRACER" :
+                     (state.mode == .solarSystem ? "KEPLERIAN ORRERY" : "GALACTIC VOLUME RENDERER"))
                     .font(.system(size: 8, weight: .semibold, design: .monospaced))
                     .tracking(1.55)
                     .foregroundColor(Palette.dim)
@@ -305,6 +311,165 @@ struct SidebarView: View {
         }
     }
 
+    private var solarViewSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "VIEW", detail: "视角") {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.5)) { state.resetCamera() }
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(Palette.dim)
+                }
+                .buttonStyle(.plain)
+                .help("重置视角")
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
+                ForEach(SolarPreset.allCases) { preset in
+                    SolarPresetButton(preset: preset,
+                                      isActive: isSolarPresetActive(preset)) {
+                        state.applySolarPreset(preset)
+                    }
+                }
+            }
+            .disabled(state.isBusy)
+
+            VStack(spacing: 8) {
+                LabeledSlider(title: "倾角",
+                              value: $state.elevation,
+                              range: 2...85,
+                              format: { String(format: "%.0f°", $0) })
+                LabeledSlider(title: "距离",
+                              value: $state.distance,
+                              range: 0.7...50,
+                              format: { String(format: "%.1f AU", $0) })
+                LabeledSlider(title: "视场",
+                              value: $state.fov,
+                              range: 25...60,
+                              format: { String(format: "%.0f°", $0) })
+            }
+            .disabled(state.isBusy)
+
+            Text("拖拽环绕 · 滚轮缩放 · 双击重置")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(Palette.faint)
+        }
+    }
+
+    private var solarSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "SOLAR SYSTEM", detail: "太阳系")
+
+            HStack(spacing: 10) {
+                Toggle("", isOn: $state.autoRotate)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .tint(Palette.amber)
+                    .labelsHidden()
+                Text("公转演化")
+                    .font(.system(size: 11.5))
+                    .foregroundColor(Palette.ink)
+                Spacer()
+                Text(state.autoRotate ? "RUNNING" : "PAUSED")
+                    .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundColor(state.autoRotate ? Palette.amber : Palette.faint)
+            }
+            .disabled(state.isBusy)
+
+            LabeledSlider(title: "速度",
+                          value: $state.rotationSpeed,
+                          range: 1...365,
+                          format: { String(format: "%.0f 天/s", $0) })
+                .disabled(state.isBusy || !state.autoRotate)
+
+            LabeledSlider(title: "行星尺寸",
+                          value: $state.solarPlanetScale,
+                          range: 0.5...2.5,
+                          format: { String(format: "%.1f×", $0) })
+                .disabled(state.isBusy)
+
+            HStack(spacing: 9) {
+                Toggle("", isOn: $state.solarOrbitLines)
+                    .toggleStyle(.switch).controlSize(.mini).tint(Palette.blue).labelsHidden()
+                Text("轨道线")
+                    .font(.system(size: 9.5))
+                    .foregroundColor(Palette.ink.opacity(0.8))
+                Spacer(minLength: 4)
+                Toggle("", isOn: $state.solarBelts)
+                    .toggleStyle(.switch).controlSize(.mini).tint(Palette.amber).labelsHidden()
+                Text("小行星带")
+                    .font(.system(size: 9.5))
+                    .foregroundColor(Palette.ink.opacity(0.8))
+            }
+            .disabled(state.isBusy)
+
+            HStack(spacing: 9) {
+                Toggle("", isOn: $state.solarMoons)
+                    .toggleStyle(.switch).controlSize(.mini).tint(Palette.pink).labelsHidden()
+                Text("主要卫星")
+                    .font(.system(size: 9.5))
+                    .foregroundColor(Palette.ink.opacity(0.8))
+                Spacer()
+                Text("月球 · 伽利略 · 泰坦")
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundColor(Palette.faint)
+            }
+            .disabled(state.isBusy)
+
+            VStack(spacing: 8) {
+                LabeledSlider(title: "曝光",
+                              value: $state.solarExposure,
+                              range: -2...2,
+                              format: { String(format: "%+.1f EV", $0) })
+                LabeledSlider(title: "泛光",
+                              value: $state.solarBloom,
+                              range: 0...0.9,
+                              format: { String(format: "%.2f", $0) })
+            }
+            .disabled(state.isBusy)
+
+            HStack {
+                Text("历元")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(Palette.faint)
+                Text("J2000 + " + SolarSystem.timeLabel(days: state.simulationTime))
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(Palette.ink.opacity(0.7))
+                Spacer()
+                Button {
+                    state.resetEvolution()
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 7.5, weight: .semibold))
+                        Text("复位")
+                            .font(.system(size: 8.5))
+                    }
+                    .foregroundColor(Palette.dim)
+                }
+                .buttonStyle(.plain)
+                .disabled(state.isBusy)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("开普勒二体 · 真实 J2000 轨道根数")
+                Text("行星半径已放大以便观察 · 卫星轨道为示意")
+            }
+            .font(.system(size: 8.2, design: .monospaced))
+            .foregroundColor(Palette.faint)
+            .lineSpacing(2)
+        }
+    }
+
+    private func isSolarPresetActive(_ preset: SolarPreset) -> Bool {
+        let v = preset.values
+        return abs(state.elevation - v.elevation) < 1.0 &&
+               abs(state.distance - v.distance) < 0.5 &&
+               abs(state.fov - v.fov) < 1.0
+    }
+
     private var blackHoleSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "BLACK HOLE", detail: "黑洞")
@@ -349,6 +514,10 @@ struct SidebarView: View {
                               value: $state.bhDiskOuter,
                               range: 6...20,
                               format: { String(format: "%.0f Rs", $0) })
+                LabeledSlider(title: "盘厚度",
+                              value: $state.bhThickness,
+                              range: 0.1...1.5,
+                              format: { String(format: "%.2f×", $0) })
                 LabeledSlider(title: "曝光",
                               value: $state.bhExposure,
                               range: -4...1,
@@ -647,6 +816,51 @@ struct SidebarView: View {
     }
 }
 
+// MARK: - Solar labels
+
+struct SolarLabelsOverlay: View {
+    @ObservedObject var state: StudioState
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let aspect = max(0.2, Double(w / max(h, 1)))
+            let settings = state.renderSettings
+            let camera = CameraBasis.make(settings: settings, aspect: aspect)
+            let bodies = SolarSystem.renderPlanets(days: state.simulationTime,
+                                                   scale: state.solarPlanetScale)
+            ZStack(alignment: .topLeading) {
+                ForEach(0..<min(bodies.count, SolarSystem.names.count), id: \.self) { i in
+                    let p = bodies[i].posRadius
+                    let world = SIMD3<Float>(p.x, p.y, p.z)
+                    let d = world - camera.position
+                    let depth = simd_dot(d, camera.forward)
+                    if depth > 0.15 {
+                        let nx = simd_dot(d, camera.right) / (depth * camera.tanHalfFov * Float(aspect))
+                        let ny = simd_dot(d, camera.up) / (depth * camera.tanHalfFov)
+                        let sx = CGFloat((nx * 0.5 + 0.5)) * w
+                        let sy = CGFloat((0.5 - ny * 0.5)) * h
+                        if sx > 8 && sx < w - 8 && sy > 8 && sy < h - 8 {
+                            let color = Color(red: Double(bodies[i].color.x),
+                                              green: Double(bodies[i].color.y),
+                                              blue: Double(bodies[i].color.z))
+                            HStack(spacing: 4) {
+                                Circle().fill(color).frame(width: 3, height: 3)
+                                Text(SolarSystem.names[i])
+                                    .font(.system(size: 8.5, weight: .medium, design: .monospaced))
+                                    .foregroundColor(.white.opacity(0.66))
+                            }
+                            .shadow(color: .black.opacity(0.8), radius: 2)
+                            .position(x: sx + 22, y: sy - 9)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Viewport
 
 struct ViewportView: View {
@@ -658,6 +872,11 @@ struct ViewportView: View {
 
             MetalViewport(state: state)
                 .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+
+            if state.mode == .solarSystem {
+                SolarLabelsOverlay(state: state)
+                    .allowsHitTesting(false)
+            }
 
             LinearGradient(colors: [.black.opacity(0.48), .clear],
                            startPoint: .top, endPoint: .bottom)
@@ -681,10 +900,14 @@ struct ViewportView: View {
                             ModePill(title: "BLACK HOLE", active: state.mode == .blackHole) {
                                 state.switchMode(.blackHole)
                             }
+                            ModePill(title: "SOLAR SYSTEM", active: state.mode == .solarSystem) {
+                                state.switchMode(.solarSystem)
+                            }
                         }
                         HStack(spacing: 7) {
                             Circle().fill(Palette.amber).frame(width: 4, height: 4)
-                            Text(state.mode == .blackHole ? "EVENT HORIZON" : "MILKY WAY")
+                            Text(state.mode == .blackHole ? "EVENT HORIZON" :
+                                 (state.mode == .solarSystem ? "HELIOCENTRIC" : "MILKY WAY"))
                                 .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
                                 .tracking(2.2)
                                 .foregroundColor(Palette.ink.opacity(0.86))
@@ -692,7 +915,9 @@ struct ViewportView: View {
                         .padding(.top, 2)
                         Text(state.mode == .blackHole ?
                              "SCHWARZSCHILD  /  ACCRETION DISK" :
-                             "M-01  /  DENSITY-WAVE BARRED SPIRAL")
+                             (state.mode == .solarSystem ?
+                              "J2000  /  KEPLERIAN PLANETARY ORBITS" :
+                              "M-01  /  DENSITY-WAVE BARRED SPIRAL"))
                             .font(.system(size: 8, design: .monospaced))
                             .tracking(1.1)
                             .foregroundColor(.white.opacity(0.38))
@@ -1062,6 +1287,38 @@ struct SectionHeader<Accessory: View>: View {
 extension SectionHeader where Accessory == EmptyView {
     init(title: String, detail: String) {
         self.init(title: title, detail: detail) { EmptyView() }
+    }
+}
+
+struct SolarPresetButton: View {
+    let preset: SolarPreset
+    let isActive: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(preset.title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(isActive ? Palette.ink : Palette.ink.opacity(0.78))
+                Text(preset.subtitle)
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundColor(isActive ? Palette.amber.opacity(0.8) : Palette.faint)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isActive ? Palette.panelRaised : Color.white.opacity(0.025))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(isActive ? Palette.amber.opacity(0.38) : Palette.line,
+                            lineWidth: isActive ? 0.9 : 0.7)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 

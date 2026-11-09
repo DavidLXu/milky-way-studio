@@ -643,7 +643,8 @@ static inline float4 sampleDiskVolume(float3 p, float time,
     if (r > rOut * 1.45) return float4(0.0);
 
     float t = clamp((r - rIn) / max(rOut - rIn, 0.001), 0.0, 1.0);
-    float h = mix(0.035, 0.26, t * t);
+    float thicknessScale = clamp(u.params4.y, 0.2, 2.0);
+    float h = mix(0.035, 0.26, t * t) * thicknessScale;
     float y = p.y;
     if (abs(y) > 3.4 * h) return float4(0.0);
 
@@ -701,12 +702,13 @@ static inline float4 sampleDiskVolume(float3 p, float time,
         (0.36 + 0.78 * clump + 0.65 * filament + 0.35 * hotSpot);
     // A low-density corona/atmosphere. It fills the dark gaps between the
     // higher-order lensed images and gives the flow a soft outer edge.
-    float halo = exp(-abs(y) / 0.62) * radial;
+    float halo = exp(-abs(y) / max(0.12, 0.62 * thicknessScale)) * radial;
     density += halo * 0.16;
     emission += diskColor * halo * 0.10 * g4 * u.params3.y;
 
     if (r > rOut) {
-        float outerGlow = exp(-(r - rOut) / 1.9) * exp(-abs(y) / 0.80);
+        float outerGlow = exp(-(r - rOut) / 1.9) *
+                          exp(-abs(y) / max(0.16, 0.80 * thicknessScale));
         float3 outerColor = blackbodyRGB(max(2200.0, Tobs));
         emission += outerColor * outerGlow * 0.045 * u.params3.y;
         density += outerGlow * 0.035;
@@ -1068,6 +1070,280 @@ kernel void integrate_stars(device StarParticle *stars [[buffer(0)]],
 // -----------------------------------------------------------------------------
 // Bloom
 // -----------------------------------------------------------------------------
+
+
+// -----------------------------------------------------------------------------
+// Solar system: Keplerian planets, moons, Saturn rings, belts and orbit lines
+// -----------------------------------------------------------------------------
+
+struct SolarPlanet {
+    float4 posRadius;   // xyz AU, display radius AU
+    float4 color;       // rgb, unused
+    float4 orbit;       // a AU, e, varpi rad, orbit-line alpha
+    float4 flags;       // type, ring strength, ring tilt rad, active
+};
+
+static inline float solarRaySphere(float3 ro, float3 rd, float3 c, float r) {
+    float3 oc = ro - c;
+    float b = dot(oc, rd);
+    float cc = dot(oc, oc) - r * r;
+    float h = b * b - cc;
+    if (h < 0.0) return -1.0;
+    h = sqrt(h);
+    float t0 = -b - h;
+    float t1 = -b + h;
+    if (t0 > 1e-4) return t0;
+    if (t1 > 1e-4) return t1;
+    return -1.0;
+}
+
+static inline float3 solarSurface(int type, float3 n, float3 base, float seed) {
+    float3 np = n * 2.6 + float3(seed * 7.1, seed * 3.7, seed * 5.3);
+    float grain = fbm3(np, 4);
+    float fine = fbm3(np * 3.7 + 4.0, 3);
+
+    if (type == 0) { // Mercury
+        float craters = smoothstep(0.58, 0.74, fbm3(np * 3.2, 4));
+        return base * (0.62 + 0.42 * grain) * (0.9 + 0.14 * craters);
+    }
+    if (type == 1) { // Venus
+        float cloud = 0.5 + 0.5 * sin(n.y * 12.0 + fbm3(np * 1.8, 4) * 5.0);
+        return mix(base * 0.72, float3(1.0, 0.92, 0.72), cloud * 0.55);
+    }
+    if (type == 2) { // Earth
+        float land = fbm3(np * 2.2, 5);
+        float continents = smoothstep(0.47, 0.55, land);
+        float3 ocean = float3(0.025, 0.11, 0.30) * (0.8 + 0.35 * fine);
+        float3 ground = mix(float3(0.09, 0.22, 0.08), float3(0.42, 0.34, 0.18), fine);
+        float3 col = mix(ocean, ground, continents);
+        float clouds = smoothstep(0.52, 0.70, fbm3(np * 4.5 + 11.0, 5));
+        col = mix(col, float3(0.92, 0.95, 0.98), clouds * 0.82);
+        float ice = smoothstep(0.78, 0.92, abs(n.y));
+        col = mix(col, float3(0.82, 0.90, 0.96), ice);
+        return col;
+    }
+    if (type == 3) { // Mars
+        float dust = 0.5 + 0.5 * fbm3(np * 2.8, 4);
+        float3 col = mix(float3(0.42, 0.16, 0.075), float3(0.83, 0.40, 0.20), dust);
+        float cap = smoothstep(0.84, 0.97, abs(n.y));
+        return mix(col, float3(0.92, 0.90, 0.86), cap * 0.8);
+    }
+    if (type == 4) { // Jupiter
+        float bands = 0.5 + 0.5 * sin(n.y * 28.0 + fbm3(np * 2.0, 4) * 3.2);
+        float3 col = mix(float3(0.55, 0.38, 0.24), float3(0.95, 0.84, 0.65), bands);
+        float swirl = fbm3(np * 4.0 + 7.0, 4);
+        col = mix(col, float3(0.86, 0.66, 0.46), swirl * 0.35);
+        float3 spotDir = normalize(float3(0.55, -0.22, 0.80));
+        float spot = smoothstep(0.16, 0.03, distance(n, spotDir));
+        col = mix(col, float3(0.68, 0.24, 0.14), spot);
+        return col;
+    }
+    if (type == 5) { // Saturn
+        float bands = 0.5 + 0.5 * sin(n.y * 22.0 + fbm3(np * 1.7, 4) * 2.4);
+        return mix(float3(0.70, 0.58, 0.38), float3(0.96, 0.89, 0.68), bands);
+    }
+    if (type == 6) { // Uranus
+        return mix(float3(0.37, 0.70, 0.76), float3(0.65, 0.88, 0.91),
+                   0.5 + 0.5 * sin(n.y * 8.0 + fine * 1.5));
+    }
+    if (type == 7) { // Neptune
+        float bands = 0.5 + 0.5 * sin(n.y * 11.0 + fbm3(np * 2.5, 4) * 3.0);
+        return mix(float3(0.09, 0.22, 0.58), float3(0.28, 0.48, 0.86), bands);
+    }
+    if (type == 8) { // Moon
+        float craters = smoothstep(0.50, 0.72, fbm3(np * 4.0, 4));
+        return base * (0.60 + 0.38 * grain) * (0.88 + 0.16 * craters);
+    }
+    if (type == 13) { // Titan
+        return mix(base * 0.7, float3(0.95, 0.76, 0.42), 0.45 + 0.35 * grain);
+    }
+    if (type == 14) { // Pluto
+        float heart = smoothstep(0.18, 0.02, distance(n, normalize(float3(0.3, 0.2, 0.9))));
+        return mix(base * (0.6 + 0.4 * grain), float3(0.90, 0.82, 0.70), heart * 0.5);
+    }
+    // Io / Europa / Ganymede / Callisto
+    if (type == 9) {
+        return mix(float3(0.86, 0.72, 0.18), float3(0.95, 0.85, 0.42), 0.5 + 0.5 * sin(fine * 19.0));
+    }
+    if (type == 10) {
+        return mix(float3(0.78, 0.80, 0.78), float3(0.96, 0.94, 0.88), 0.5 + 0.5 * sin(fine * 12.0));
+    }
+    if (type == 11) {
+        return mix(float3(0.44, 0.40, 0.35), float3(0.72, 0.68, 0.60), 0.5 + 0.5 * grain);
+    }
+    if (type == 12) {
+        return mix(float3(0.24, 0.22, 0.20), float3(0.48, 0.42, 0.35), 0.6 + 0.4 * grain);
+    }
+    return base * (0.7 + 0.4 * grain);
+}
+
+fragment float4 solar_fragment(VOut in [[stage_in]],
+                               constant SceneUniforms &u [[buffer(0)]],
+                               const device SolarPlanet *planets [[buffer(1)]]) {
+    uint sampleIndex = uint(u.params2.y);
+    float2 jitter = (hash22(in.position.xy + float(sampleIndex) * 17.31) - 0.5) / u.resolution.xy;
+    float2 scr = (in.position.xy + jitter) / u.resolution.xy * 2.0 - 1.0;
+    float aspect = u.cameraUp.w;
+    float tanHalf = u.cameraRight.w;
+    float3 rd = normalize(u.cameraForward.xyz
+                         + u.cameraRight.xyz * (scr.x * tanHalf * aspect)
+                         + u.cameraUp.xyz * (scr.y * tanHalf));
+    float3 ro = u.cameraPos.xyz;
+    float days = u.cameraForward.w;
+
+    float3 col = starField(rd, u.resolution.xy, uint(u.params2.z)) * 0.62;
+    float showOrbits = u.params3.y;
+    float showBelts = u.params3.z;
+    float showMoons = u.params3.w;
+    float lineWidth = max(u.params4.x, 0.0007);
+    float sunRadius = 0.145;
+
+    // Orbit rings, drawn as thin circles in the ecliptic plane.
+    if (showOrbits > 0.5 && abs(rd.y) > 1e-4) {
+        float tPlane = -ro.y / rd.y;
+        if (tPlane > 0.0) {
+            float3 p = ro + rd * tPlane;
+            float rp = length(p.xz);
+            for (int i = 0; i < 16; ++i) {
+                SolarPlanet pl = planets[i];
+                if (pl.flags.w < 0.5 || pl.orbit.w <= 0.0) continue;
+                float a = pl.orbit.x;
+                float e = pl.orbit.y;
+                float varpi = pl.orbit.z;
+                float x = cos(varpi) * p.x + sin(varpi) * p.z;
+                float z = -sin(varpi) * p.x + cos(varpi) * p.z;
+                float nu = atan2(z, x);
+                float rOrbit = a * (1.0 - e * e) / max(0.05, 1.0 + e * cos(nu));
+                float d = abs(rp - rOrbit);
+                float alpha = exp(-d / lineWidth) * pl.orbit.w * 0.55;
+                col += pl.color.rgb * alpha;
+            }
+        }
+    }
+
+    // Asteroid and Kuiper belts as faint procedural dust rings.
+    if (showBelts > 0.5 && abs(rd.y) > 1e-4) {
+        float tPlane = -ro.y / rd.y;
+        if (tPlane > 0.0) {
+            float3 p = ro + rd * tPlane;
+            float r = length(p.xz);
+            if (r > 2.05 && r < 3.35) {
+                float n = hash21(floor(p.xz * 26.0) + 7.1);
+                float band = 0.5 + 0.5 * sin(r * 44.0 + n * 6.0);
+                col += float3(0.42, 0.34, 0.24) * (0.006 + 0.012 * n * band);
+            }
+            if (r > 29.0 && r < 49.0) {
+                float n = hash21(floor(p.xz * 12.0) + 3.7);
+                col += float3(0.30, 0.34, 0.38) * 0.008 * n;
+            }
+        }
+    }
+
+    // Sun.
+    float sunT = solarRaySphere(ro, rd, float3(0.0), sunRadius);
+    float3 sunDir = normalize(-ro);
+    float cosA = clamp(dot(rd, sunDir), -1.0, 1.0);
+    float ang = acos(cosA);
+    float glow = exp(-ang * 44.0) * 0.24 + exp(-ang * 13.0) * 0.006;
+    col += float3(1.0, 0.56, 0.23) * glow * u.params4.y;
+
+    if (sunT > 0.0) {
+        float3 hit = ro + rd * sunT;
+        float3 n = normalize(hit);
+        float limb = pow(max(dot(n, -rd), 0.0), 0.30);
+        float spots = smoothstep(0.72, 0.90, fbm3(n * 7.0 + 2.0, 4));
+        float3 sun = float3(1.0, 0.70, 0.36) * (2.1 * limb + 0.48 * (1.0 - limb));
+        sun *= (1.0 - 0.30 * spots);
+        col = sun;
+    }
+
+    // Planets and moons.
+    int best = -1;
+    float bestT = 1e30;
+    for (int i = 0; i < 16; ++i) {
+        SolarPlanet pl = planets[i];
+        if (pl.flags.w < 0.5) continue;
+        if (pl.flags.x >= 8.0 && showMoons < 0.5) continue;
+        float minR = u.params4.z * (pl.flags.x >= 8.0 ? 0.8 : 1.35);
+        float rr = max(pl.posRadius.w, minR);
+        float t = solarRaySphere(ro, rd, pl.posRadius.xyz, rr);
+        if (t > 0.0 && t < bestT) {
+            bestT = t;
+            best = i;
+        }
+    }
+
+    if (best >= 0 && (sunT < 0.0 || bestT < sunT)) {
+        SolarPlanet pl = planets[best];
+        float3 center = pl.posRadius.xyz;
+        float minR = u.params4.z * (pl.flags.x >= 8.0 ? 0.8 : 1.35);
+        float displayedRadius = max(pl.posRadius.w, minR);
+        float3 hit = ro + rd * bestT;
+        float3 n = normalize(hit - center);
+        float3 base = pl.color.rgb;
+        int type = int(pl.flags.x);
+        float3 surface = solarSurface(type, n, base, 3.17 + float(type) * 0.71);
+        float3 L = normalize(-hit);
+        float diff = max(dot(n, L), 0.0);
+
+        float shadow = 1.0;
+        for (int j = 0; j < 16; ++j) {
+            if (j == best) continue;
+            SolarPlanet other = planets[j];
+            if (other.flags.w < 0.5) continue;
+            if (solarRaySphere(hit + n * 0.0008, L, other.posRadius.xyz, other.posRadius.w) > 0.0) {
+                shadow = 0.36;
+                break;
+            }
+        }
+
+        float rim = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
+        float3 lit = surface * (0.11 + 1.30 * diff * shadow);
+        if (type == 2) lit += float3(0.10, 0.22, 0.42) * rim * 0.85;
+        else lit += base * rim * 0.34 + base * 0.012;
+        col = lit;
+
+        // Saturn / Uranus rings: a thin annulus in the planet's equatorial plane.
+        if (pl.flags.y > 0.5) {
+            float tilt = pl.flags.z;
+            float3 rn = normalize(float3(0.0, cos(tilt), sin(tilt)));
+            float denom = dot(rd, rn);
+            if (abs(denom) > 1e-5) {
+                float tr = dot(center - ro, rn) / denom;
+                if (tr > 0.0 && tr < bestT) {
+                    float3 rp = ro + rd * tr;
+                    float rr = length(rp - center) / max(displayedRadius, 1e-5);
+                    if (rr > 1.28 && rr < 2.35) {
+                        float bands = 0.55 + 0.45 * sin(rr * 46.0 + fbm3(rp * 3.0, 3) * 5.0);
+                        float edge = smoothstep(1.28, 1.42, rr) * (1.0 - smoothstep(2.18, 2.35, rr));
+                        float alpha = pl.flags.y * edge * (0.12 + 0.42 * bands);
+                        float3 rc = mix(float3(0.78, 0.70, 0.54), float3(0.95, 0.88, 0.72), bands);
+                        col = col * (1.0 - alpha) + rc * alpha * 0.9;
+                    }
+                }
+            }
+        }
+    }
+
+    // Soft marker halos keep the planets readable when their true angular
+    // size is only a few pixels. They are intentionally subtle and are not
+    // part of the physical surface shading.
+    for (int i = 0; i < 16; ++i) {
+        SolarPlanet pl = planets[i];
+        if (pl.flags.w < 0.5) continue;
+        if (pl.flags.x >= 8.0) continue;
+        float3 oc = pl.posRadius.xyz - ro;
+        float b = dot(oc, rd);
+        if (b < 0.0) continue;
+        float3 cp = ro + rd * b;
+        float d = length(cp - pl.posRadius.xyz);
+        float r = max(pl.posRadius.w, u.params4.z * 1.35);
+        float halo = exp(-d / max(r * 5.0, 0.004)) * 0.055;
+        col += pl.color.rgb * halo;
+    }
+
+    return float4(col, 1.0);
+}
 
 fragment float4 bloom_fragment(VOut in [[stage_in]],
                                texture2d<float> src [[texture(0)]],
