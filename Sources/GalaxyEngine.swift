@@ -465,7 +465,7 @@ final class GalaxyEngine {
         u.params2 = SIMD4<Float>(Float(settings.steps), Float(sampleIndex), Float(settings.seed), 0)
         if settings.mode == .solarSystem {
             u.params3 = SIMD4<Float>(Float(settings.solarPlanetScale),
-                                     settings.solarOrbitLines ? 1 : 0,
+                                     (settings.solarOrbitLines && settings.solarFocus < 0) ? 1 : 0,
                                      settings.solarBelts ? 1 : 0,
                                      settings.solarMoons ? 1 : 0)
             let auPerPixel = Float(2.0 * settings.distance *

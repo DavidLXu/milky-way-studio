@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import simd
 
 enum PreviewQuality: String, CaseIterable, Identifiable {
     case performance
@@ -185,6 +186,7 @@ final class StudioState: ObservableObject {
     @Published var solarOrbitLines: Bool = true
     @Published var solarBelts: Bool = true
     @Published var solarMoons: Bool = true
+    @Published var solarFocus: Int = -1
     @Published var solarExposure: Double = -0.3
     @Published var solarBloom: Double = 0.28
 
@@ -243,6 +245,7 @@ final class StudioState: ObservableObject {
         s.solarOrbitLines = solarOrbitLines
         s.solarBelts = solarBelts
         s.solarMoons = solarMoons
+        s.solarFocus = solarFocus
 
         if mode == .blackHole {
             s.starLayerEnabled = false
@@ -256,6 +259,7 @@ final class StudioState: ObservableObject {
         } else if mode == .solarSystem {
             s.starLayerEnabled = false
             s.dustHighEnabled = false
+            s.solarOrbitLines = solarOrbitLines && solarFocus < 0
             s.exposure = solarExposure
             s.bloom = solarBloom
             s.steps = 64
@@ -304,6 +308,10 @@ final class StudioState: ObservableObject {
                           azimuth, elevation, distance, fov)
         }
         if mode == .solarSystem {
+            if solarFocus >= 0 {
+                return String(format: "%@  ·  %.2f AU  ·  %.0f° FOV",
+                              SolarSystem.focusName(solarFocus), distance, fov)
+            }
             return String(format: "%02.0f° / %02.0f°  ·  %.1f AU  ·  %.0f° FOV",
                           azimuth, elevation, distance, fov)
         }
@@ -323,6 +331,7 @@ final class StudioState: ObservableObject {
     func switchMode(_ newMode: SceneMode) {
         guard mode != newMode else { return }
         mode = newMode
+        solarFocus = -1
         if newMode == .blackHole {
             azimuth = 34
             elevation = 6
@@ -395,7 +404,7 @@ final class StudioState: ObservableObject {
         let upper: Double
         switch mode {
         case .solarSystem:
-            lower = 0.7
+            lower = 0.02
             upper = 62
         case .blackHole:
             lower = 8
@@ -407,6 +416,89 @@ final class StudioState: ObservableObject {
         distance = min(upper, max(lower, distance * exp(-Double(delta) * 0.012)))
     }
 
+    var solarFocusLabel: String {
+        SolarSystem.focusName(solarFocus)
+    }
+
+    func focusSolar(_ focus: Int) {
+        guard mode == .solarSystem else { return }
+        let clamped = min(max(focus, 0), 9)
+        solarFocus = clamped
+        distance = SolarSystem.focusDistance(clamped, days: simulationTime,
+                                             scale: solarPlanetScale)
+        fov = 34
+        elevation = 24
+        azimuth = 35
+        showIntroOverlay = false
+    }
+
+    func clearSolarFocus() {
+        guard mode == .solarSystem else { return }
+        solarFocus = -1
+        azimuth = 35
+        elevation = 28
+        distance = 18
+        fov = 42
+    }
+
+    /// Project planet centres to the viewport and pick the nearest body within
+    /// a generous screen-space radius. This makes the tiny inner planets easy
+    /// to click without requiring a separate label hit target.
+    func pickSolar(at point: CGPoint, viewSize: CGSize) {
+        guard mode == .solarSystem, viewSize.width > 1, viewSize.height > 1 else { return }
+        let w = Double(viewSize.width)
+        let h = Double(viewSize.height)
+        let aspect = w / h
+        var settings = renderSettings
+        settings.time = simulationTime
+        let camera = CameraBasis.make(settings: settings, aspect: aspect)
+        let bodies = SolarSystem.renderPlanets(days: simulationTime,
+                                               scale: solarPlanetScale)
+
+        func project(_ p: SIMD4<Float>) -> (x: Double, y: Double, radius: Double, depth: Double)? {
+            let d = SIMD3<Float>(p.x, p.y, p.z) - camera.position
+            let depth = Double(simd_dot(d, camera.forward))
+            guard depth > 0.02 else { return nil }
+            let nx = Double(simd_dot(d, camera.right)) /
+                     (depth * Double(camera.tanHalfFov) * aspect)
+            let ny = Double(simd_dot(d, camera.up)) /
+                     (depth * Double(camera.tanHalfFov))
+            let sx = (nx * 0.5 + 0.5) * w
+            let sy = (0.5 - ny * 0.5) * h
+            let radius = Double(p.w) / (depth * Double(camera.tanHalfFov)) * h * 0.5
+            return (sx, sy, radius, depth)
+        }
+
+        var bestFocus = -1
+        var bestScore = Double.greatestFiniteMagnitude
+        // Sun
+        if let s = project(SIMD4<Float>(0, 0, 0, SolarSystem.sunVisualRadius)) {
+            let dist = hypot(Double(point.x) - s.x, Double(point.y) - s.y)
+            let threshold = max(38.0, s.radius + 18.0)
+            if dist < threshold {
+                bestScore = dist - s.radius * 0.35
+                bestFocus = 0
+            }
+        }
+        for i in 0..<min(9, bodies.count) {
+            let p = bodies[i].posRadius
+            if let s = project(SIMD4<Float>(p.x, p.y, p.z, p.w)) {
+                let dist = hypot(Double(point.x) - s.x, Double(point.y) - s.y)
+                let threshold = max(32.0, s.radius + 16.0)
+                if dist < threshold {
+                    let score = dist - s.radius * 0.35
+                    if score < bestScore {
+                        bestScore = score
+                        bestFocus = i + 1
+                    }
+                }
+            }
+        }
+        if bestFocus >= 0 {
+            focusSolar(bestFocus)
+        }
+    }
+
     func resetEvolution() {
         simulationTime = 0
         timeResetCounter += 1
@@ -416,6 +508,7 @@ final class StudioState: ObservableObject {
     func resetCamera() {
         switch mode {
         case .solarSystem:
+            solarFocus = -1
             azimuth = 35
             elevation = 28
             distance = 18

@@ -342,8 +342,8 @@ struct SidebarView: View {
                               format: { String(format: "%.0f°", $0) })
                 LabeledSlider(title: "距离",
                               value: $state.distance,
-                              range: 0.7...50,
-                              format: { String(format: "%.1f AU", $0) })
+                              range: 0.05...50,
+                              format: { String(format: "%.2f AU", $0) })
                 LabeledSlider(title: "视场",
                               value: $state.fov,
                               range: 25...60,
@@ -351,8 +351,8 @@ struct SidebarView: View {
             }
             .disabled(state.isBusy)
 
-            Text("拖拽环绕 · 滚轮缩放 · 双击重置")
-                .font(.system(size: 9, design: .monospaced))
+            Text("点击行星聚焦 · 拖拽环绕 · 滚轮缩放 · ESC 返回全景")
+                .font(.system(size: 8.5, design: .monospaced))
                 .foregroundColor(Palette.faint)
         }
     }
@@ -360,6 +360,26 @@ struct SidebarView: View {
     private var solarSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "SOLAR SYSTEM", detail: "太阳系")
+
+            if state.solarFocus >= 0 {
+                HStack(spacing: 7) {
+                    Text("聚焦")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(Palette.faint)
+                    Text(state.solarFocusLabel)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Palette.amber)
+                    Spacer()
+                    Button("返回全景") {
+                        withAnimation(.easeInOut(duration: 0.55)) {
+                            state.clearSolarFocus()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 9))
+                    .foregroundColor(Palette.dim)
+                }
+            }
 
             HStack(spacing: 10) {
                 Toggle("", isOn: $state.autoRotate)
@@ -876,6 +896,39 @@ struct ViewportView: View {
             if state.mode == .solarSystem {
                 SolarLabelsOverlay(state: state)
                     .allowsHitTesting(false)
+
+                if state.solarFocus >= 0 {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.55)) {
+                                    state.clearSolarFocus()
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.uturn.backward")
+                                        .font(.system(size: 8, weight: .semibold))
+                                    Text("\(state.solarFocusLabel) · 返回全景")
+                                        .font(.system(size: 9.5, weight: .medium))
+                                    Text("ESC")
+                                        .font(.system(size: 7.5, design: .monospaced))
+                                        .foregroundColor(.white.opacity(0.35))
+                                }
+                                .foregroundColor(.white.opacity(0.82))
+                                .padding(.horizontal, 11)
+                                .frame(height: 27)
+                                .background(Capsule().fill(.black.opacity(0.46)))
+                                .overlay(Capsule().stroke(.white.opacity(0.14)))
+                            }
+                            .buttonStyle(.plain)
+                            Spacer()
+                        }
+                        .padding(.top, 88)
+                        Spacer()
+                    }
+                    .allowsHitTesting(true)
+                }
             }
 
             LinearGradient(colors: [.black.opacity(0.48), .clear],

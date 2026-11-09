@@ -104,8 +104,9 @@ struct RenderSettings: Equatable {
     var solarOrbitLines: Bool = true
     var solarBelts: Bool = true
     var solarMoons: Bool = true
-    var solarExposure: Double = 0.0
-    var solarBloom: Double = 0.38
+    var solarFocus: Int = -1          // -1 = system view, 0 = Sun, 1... = planet
+    var solarExposure: Double = -0.3
+    var solarBloom: Double = 0.28
 }
 
 struct SceneKey: Equatable {
@@ -132,6 +133,7 @@ struct SceneKey: Equatable {
     var solarOrbitLines: Bool
     var solarBelts: Bool
     var solarMoons: Bool
+    var solarFocus: Int
     var width: Int
     var height: Int
 
@@ -159,6 +161,7 @@ struct SceneKey: Equatable {
         self.solarOrbitLines = settings.solarOrbitLines
         self.solarBelts = settings.solarBelts
         self.solarMoons = settings.solarMoons
+        self.solarFocus = settings.solarFocus
         self.width = width
         self.height = height
     }
@@ -178,16 +181,19 @@ struct CameraBasis {
         switch settings.mode {
         case .galaxy: minimumDistance = 24.0
         case .blackHole: minimumDistance = 8.0
-        case .solarSystem: minimumDistance = 0.65
+        case .solarSystem: minimumDistance = 0.02
         }
         let d = max(minimumDistance, settings.distance)
 
-        let eye = SIMD3<Double>(
+        var target = SIMD3<Double>(0.0, 0.0, 0.0)
+        if settings.mode == .solarSystem && settings.solarFocus >= 0 {
+            target = SolarSystem.focusPosition(settings.solarFocus, days: settings.time)
+        }
+        let eye = target + SIMD3<Double>(
             d * cos(el) * sin(az),
             d * sin(el),
             d * cos(el) * cos(az)
         )
-        let target = SIMD3<Double>(0.0, 0.0, 0.0)
         var forward = simd_normalize(target - eye)
         let worldUp = SIMD3<Double>(0.0, 1.0, 0.0)
         var right = simd_cross(forward, worldUp)

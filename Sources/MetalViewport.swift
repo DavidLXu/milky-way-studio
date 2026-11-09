@@ -9,9 +9,12 @@ final class GalaxyMTKView: MTKView {
     var onResetCamera: (() -> Void)?
     var onToggleRotate: (() -> Void)?
     var onToggleSidebar: (() -> Void)?
+    var onPick: ((CGPoint, CGSize) -> Void)?
+    var onEscape: (() -> Void)?
 
     private var lastPoint: NSPoint = .zero
     private var dragged = false
+    private var clickCount = 0
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -24,6 +27,7 @@ final class GalaxyMTKView: MTKView {
         window?.makeFirstResponder(self)
         lastPoint = event.locationInWindow
         dragged = false
+        clickCount = event.clickCount
         if event.clickCount == 2 {
             onResetCamera?()
         }
@@ -41,7 +45,14 @@ final class GalaxyMTKView: MTKView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        _ = dragged
+        if !dragged && clickCount == 1 {
+            let p = convert(event.locationInWindow, from: nil)
+            // AppKit view coordinates are bottom-left; the camera/pick code
+            // uses top-left screen coordinates.
+            onPick?(CGPoint(x: p.x, y: bounds.height - p.y), bounds.size)
+        }
+        clickCount = 0
+        dragged = false
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -62,6 +73,10 @@ final class GalaxyMTKView: MTKView {
         }
         if event.keyCode == 48 { // tab
             onToggleSidebar?()
+            return
+        }
+        if event.keyCode == 53 { // esc
+            onEscape?()
             return
         }
         super.keyDown(with: event)
@@ -119,6 +134,16 @@ struct MetalViewport: NSViewRepresentable {
         view.onToggleSidebar = { [weak state] in
             guard let state else { return }
             withAnimation(.easeInOut(duration: 0.28)) { state.showSidebar.toggle() }
+        }
+        view.onPick = { [weak state] point, size in
+            guard let state, !state.isBusy else { return }
+            state.pickSolar(at: point, viewSize: size)
+        }
+        view.onEscape = { [weak state] in
+            guard let state else { return }
+            if state.mode == .solarSystem && state.solarFocus >= 0 {
+                withAnimation(.easeInOut(duration: 0.5)) { state.clearSolarFocus() }
+            }
         }
 
         guard device != nil else {

@@ -35,6 +35,7 @@ final class GalaxyRenderer: NSObject, MTKViewDelegate {
     private var lastResetCounter: Int = -1
     private var lastSimResetCounter: Int = -1
     private var lastStatusTime: CFTimeInterval = 0
+    private var lastTimeCallback: CFTimeInterval = 0
     private var fpsSmoothed: Double = 0
     private var framesSinceStatus = 0
 
@@ -279,6 +280,14 @@ final class GalaxyRenderer: NSObject, MTKViewDelegate {
         cb.present(drawable)
         cb.commit()
 
+        if now - lastTimeCallback > 1.0 / 30.0 {
+            lastTimeCallback = now
+            let timeNow = patternTime
+            DispatchQueue.main.async { [weak self] in
+                self?.onTime?(timeNow)
+            }
+        }
+
         framesSinceStatus += 1
         if now - lastStatusTime > 0.45 {
             let fps = Double(framesSinceStatus) / max(now - lastStatusTime, 0.001)
@@ -291,7 +300,6 @@ final class GalaxyRenderer: NSObject, MTKViewDelegate {
             let h = targetHeight
             DispatchQueue.main.async { [weak self] in
                 self?.onStatus?(fpsValue, w, h, samples)
-                self?.onTime?(self?.patternTime ?? 0)
             }
         }
 

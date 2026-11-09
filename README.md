@@ -111,6 +111,8 @@
 
 ![Solar System](SolarSystem_4K_preview.jpg)
 
+![Earth focus](SolarSystem_Earth_4K_preview.jpg)
+
 ### 轨道
 
 - 使用 J2000 历元的 8 颗行星轨道根数：`a, e, i, Ω, ω, M0, period`；
@@ -134,6 +136,8 @@
 ### 交互
 
 - `内行星`、`全景`、`俯视`、`外行星` 四个相机预设；
+- **点击任意行星或太阳附近即聚焦到该天体**，相机目标跟随其公转；
+- 聚焦后按 `ESC`、双击画面或点顶部“返回全景”回到整个太阳系；
 - 速度 1–365 天/秒；
 - 行星尺寸、轨道线、小行星带、主要卫星、曝光、泛光均可调；
 - 空格暂停/继续公转，拖拽环绕，滚轮缩放，双击复位。
@@ -270,6 +274,13 @@ open "build/Milky Way Studio.app"
   --out solar.png \
   --width 3840 --height 2400 --samples 64 \
   --az 35 --el 26 --dist 18 --fov 42 --time 0
+```
+
+聚焦地球（`--focus`：0=太阳，1=水星，2=金星，3=地球，…，9=冥王星）：
+
+```bash
+./build/galaxycli --solar --focus 3 --out Earth.png \
+  --width 3840 --height 2400 --samples 64 --time 120
 ```
 
 `--time` 的单位是自 J2000 起的天数。黑洞模式：

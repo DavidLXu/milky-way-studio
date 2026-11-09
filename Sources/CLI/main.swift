@@ -32,12 +32,19 @@ if args.contains("--solar") {
     settings.solarBelts = !args.contains("--no-belts")
     settings.solarMoons = !args.contains("--no-moons")
     settings.solarPlanetScale = doubleValue("--planet-scale", 1.0)
+    settings.solarFocus = intValue("--focus", -1)
     settings.solarExposure = doubleValue("--solar-exposure", -0.3)
     settings.solarBloom = doubleValue("--bloom", 0.28)
 }
 settings.azimuth = doubleValue("--az", settings.azimuth)
 settings.elevation = doubleValue("--el", settings.elevation)
 settings.distance = doubleValue("--dist", settings.distance)
+if settings.mode == .solarSystem && settings.solarFocus >= 0 && !args.contains("--dist") {
+    settings.distance = SolarSystem.focusDistance(settings.solarFocus,
+                                                  days: doubleValue("--time", 0),
+                                                  scale: settings.solarPlanetScale)
+    settings.fov = doubleValue("--fov", 34)
+}
 settings.fov = doubleValue("--fov", settings.fov)
 settings.time = doubleValue("--time", 0)
 settings.dust = doubleValue("--dust", 1.0)

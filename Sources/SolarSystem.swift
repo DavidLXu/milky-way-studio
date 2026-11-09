@@ -145,6 +145,30 @@ enum SolarSystem {
         return Array(out.prefix(maxBodies))
     }
 
+    /// Body position used as the camera target. `focus` is -1 for the system
+    /// centre, 0 for the Sun, and 1...9 for a planet.
+    static func focusPosition(_ focus: Int, days: Double) -> SIMD3<Double> {
+        guard focus > 0 else { return SIMD3<Double>(0, 0, 0) }
+        let bodies = renderPlanets(days: days, scale: 1.0)
+        let index = min(max(focus - 1, 0), 8)
+        let p = bodies[index].posRadius
+        return SIMD3<Double>(Double(p.x), Double(p.y), Double(p.z))
+    }
+
+    static func focusDistance(_ focus: Int, days: Double, scale: Double) -> Double {
+        if focus <= 0 { return 0.95 }
+        let bodies = renderPlanets(days: days, scale: scale)
+        let index = min(max(focus - 1, 0), 8)
+        return max(0.07, Double(bodies[index].posRadius.w) * 6.2)
+    }
+
+    static func focusName(_ focus: Int) -> String {
+        if focus < 0 { return "全景" }
+        if focus == 0 { return "太阳" }
+        let index = min(max(focus - 1, 0), names.count - 1)
+        return names[index]
+    }
+
     /// Human-readable simulation time.
     static func timeLabel(days: Double) -> String {
         let years = days / 365.25
