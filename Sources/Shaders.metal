@@ -1252,7 +1252,7 @@ fragment float4 solar_fragment(VOut in [[stage_in]],
         float3 n = normalize(hit);
         float limb = pow(max(dot(n, -rd), 0.0), 0.30);
         float spots = smoothstep(0.72, 0.90, fbm3(n * 7.0 + 2.0, 4));
-        float3 sun = float3(1.0, 0.70, 0.36) * (2.1 * limb + 0.48 * (1.0 - limb));
+        float3 sun = float3(1.0, 0.68, 0.34) * (1.25 * limb + 0.35 * (1.0 - limb));
         sun *= (1.0 - 0.30 * spots);
         col = sun;
     }
