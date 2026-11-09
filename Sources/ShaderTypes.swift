@@ -97,7 +97,7 @@ struct RenderSettings: Equatable {
     var bhDoppler: Bool = true
     var bhJets: Bool = false
     var bhSoftness: Double = 1.6
-    var bhThickness: Double = 0.25
+    var bhThickness: Double = 0.1
 
     // Solar system
     var solarPlanetScale: Double = 1.0

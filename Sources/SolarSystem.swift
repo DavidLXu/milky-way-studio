@@ -66,7 +66,7 @@ enum SolarSystem {
         let X = x1 * cos(om) - y1 * sin(om) * cos(inc)
         let Y = x1 * sin(om) + y1 * cos(om) * cos(inc)
         let Z = y1 * sin(inc)
-        return SIMD3(X, Z, Y)
+        return SIMD3(X, Z, -Y)
     }
 
     private static func visualRadius(_ real: Double, scale: Double) -> Float {
@@ -94,7 +94,7 @@ enum SolarSystem {
             let p = heliocentric(el, days: days)
             positions.append(p)
             let orbit = SIMD4<Float>(Float(el.a), Float(el.e),
-                                     Float((el.node + el.peri) * .pi / 180.0),
+                                     Float(-(el.node + el.peri) * .pi / 180.0),
                                      el.orbitAlpha)
             out.append(body(el.type, el.color, pos: p,
                             radius: visualRadius(el.realRadius, scale: scale),
@@ -107,7 +107,7 @@ enum SolarSystem {
         let moonR = max(earthR * 2.7, 0.030 * Float(max(0.5, scale)))
         let moonAngle = 2.0 * .pi * days / 27.322
         out.append(body(8, SIMD3(0.72, 0.70, 0.66),
-                        pos: earth + SIMD3(cos(moonAngle) * Double(moonR), 0, sin(moonAngle) * Double(moonR)),
+                        pos: earth + SIMD3(cos(moonAngle) * Double(moonR), 0, -sin(moonAngle) * Double(moonR)),
                         radius: max(earthR * 0.24, 0.0045 * Float(max(0.5, scale))),
                         orbit: .zero))
 
@@ -124,7 +124,7 @@ enum SolarSystem {
             let ang = 2.0 * .pi * days / m.1 + Double(i) * 1.3
             let rr = Double(jupR * m.0)
             out.append(body(9 + Float(i), m.3,
-                            pos: jupiter + SIMD3(cos(ang) * rr, 0, sin(ang) * rr),
+                            pos: jupiter + SIMD3(cos(ang) * rr, 0, -sin(ang) * rr),
                             radius: max(jupR * m.2, 0.0045 * Float(max(0.5, scale))),
                             orbit: .zero))
         }
@@ -135,7 +135,7 @@ enum SolarSystem {
         let titanAngle = 2.0 * .pi * days / 15.945 + 0.8
         out.append(body(13, SIMD3(0.88, 0.65, 0.38),
                         pos: saturn + SIMD3(cos(titanAngle) * Double(satR * 3.2), 0,
-                                            sin(titanAngle) * Double(satR * 3.2)),
+                                            -sin(titanAngle) * Double(satR * 3.2)),
                         radius: max(satR * 0.20, 0.0045 * Float(max(0.5, scale))),
                         orbit: .zero))
 
@@ -160,6 +160,18 @@ enum SolarSystem {
         let bodies = renderPlanets(days: days, scale: scale)
         let index = min(max(focus - 1, 0), 8)
         return max(0.07, Double(bodies[index].posRadius.w) * 6.2)
+    }
+
+    /// Camera angles that put the observer on the sunward side of the body,
+    /// giving a mostly full-lit disk for the initial close-up.
+    static func focusCameraAngles(_ focus: Int, days: Double) -> (azimuth: Double, elevation: Double) {
+        guard focus > 0 else { return (35, 24) }
+        let p = focusPosition(focus, days: days)
+        let len = max(1e-6, sqrt(p.x * p.x + p.y * p.y + p.z * p.z))
+        let toSun = SIMD3<Double>(-p.x / len, -p.y / len, -p.z / len)
+        let rawEl = asin(max(-0.6, min(0.6, toSun.y))) * 180.0 / .pi
+        return (atan2(toSun.x, toSun.z) * 180.0 / .pi,
+                min(48, max(12, rawEl + 18)))
     }
 
     static func focusName(_ focus: Int) -> String {

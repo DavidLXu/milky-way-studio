@@ -472,7 +472,7 @@ final class GalaxyEngine {
                                    tan(settings.fov * .pi / 360.0) /
                                    Double(max(height, 1)))
             u.params4 = SIMD4<Float>(Float(max(0.0012, settings.distance * 0.00045)),
-                                     1.0, auPerPixel, 0)
+                                     1.0, auPerPixel, Float(settings.solarFocus))
         } else {
             u.params3 = SIMD4<Float>(Float(settings.bhTemp),
                                      Float(settings.bhBrightness),

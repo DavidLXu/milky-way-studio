@@ -1195,6 +1195,7 @@ fragment float4 solar_fragment(VOut in [[stage_in]],
     float showOrbits = u.params3.y;
     float showBelts = u.params3.z;
     float showMoons = u.params3.w;
+    int focusIndex = int(u.params4.w);
     float lineWidth = max(u.params4.x, 0.0007);
     float sunRadius = 0.145;
 
@@ -1264,6 +1265,8 @@ fragment float4 solar_fragment(VOut in [[stage_in]],
         SolarPlanet pl = planets[i];
         if (pl.flags.w < 0.5) continue;
         if (pl.flags.x >= 8.0 && showMoons < 0.5) continue;
+        // In a close-up, do not let a foreground planet block the target.
+        if (focusIndex > 0 && pl.flags.x < 8.0 && i != focusIndex - 1) continue;
         float minR = u.params4.z * (pl.flags.x >= 8.0 ? 0.8 : 1.35);
         float rr = max(pl.posRadius.w, minR);
         float t = solarRaySphere(ro, rd, pl.posRadius.xyz, rr);
@@ -1286,14 +1289,19 @@ fragment float4 solar_fragment(VOut in [[stage_in]],
         float3 L = normalize(-hit);
         float diff = max(dot(n, L), 0.0);
 
+        // In a close-up, ignore shadows from planets that are hidden by the
+        // focus filter; otherwise a foreground transit can black out half of
+        // the target for no visible reason.
         float shadow = 1.0;
-        for (int j = 0; j < 16; ++j) {
-            if (j == best) continue;
-            SolarPlanet other = planets[j];
-            if (other.flags.w < 0.5) continue;
-            if (solarRaySphere(hit + n * 0.0008, L, other.posRadius.xyz, other.posRadius.w) > 0.0) {
-                shadow = 0.36;
-                break;
+        if (focusIndex <= 0) {
+            for (int j = 0; j < 16; ++j) {
+                if (j == best) continue;
+                SolarPlanet other = planets[j];
+                if (other.flags.w < 0.5) continue;
+                if (solarRaySphere(hit + n * 0.0008, L, other.posRadius.xyz, other.posRadius.w) > 0.0) {
+                    shadow = 0.36;
+                    break;
+                }
             }
         }
 

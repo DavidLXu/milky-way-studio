@@ -23,7 +23,7 @@ var settings = RenderSettings()
 if args.contains("--solar") {
     settings.mode = .solarSystem
     settings.azimuth = 35
-    settings.elevation = 28
+    settings.elevation = 52
     settings.distance = 18
     settings.fov = 42
     settings.starLayerEnabled = false
@@ -47,6 +47,11 @@ if settings.mode == .solarSystem && settings.solarFocus >= 0 && !args.contains("
 }
 settings.fov = doubleValue("--fov", settings.fov)
 settings.time = doubleValue("--time", 0)
+if settings.mode == .solarSystem && settings.solarFocus >= 0 {
+    let a = SolarSystem.focusCameraAngles(settings.solarFocus, days: settings.time)
+    if !args.contains("--az") { settings.azimuth = a.azimuth }
+    if !args.contains("--el") { settings.elevation = a.elevation }
+}
 settings.dust = doubleValue("--dust", 1.0)
 settings.exposure = doubleValue("--exposure", 0.0)
 settings.bloom = doubleValue("--bloom", settings.bloom)
@@ -68,7 +73,7 @@ if args.contains("--blackhole") {
     settings.bhDoppler = !args.contains("--no-doppler")
     settings.bhJets = args.contains("--jets")
     settings.bhSoftness = doubleValue("--bh-soft", 1.6)
-    settings.bhThickness = doubleValue("--bh-thickness", 0.25)
+    settings.bhThickness = doubleValue("--bh-thickness", 0.1)
 }
 
 do {

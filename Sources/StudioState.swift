@@ -137,10 +137,10 @@ enum SolarPreset: String, CaseIterable, Identifiable {
     }
     var values: (azimuth: Double, elevation: Double, distance: Double, fov: Double) {
         switch self {
-        case .inner: return (35, 24, 3.2, 44)
-        case .system: return (35, 28, 18, 42)
+        case .inner: return (35, 48, 3.2, 44)
+        case .system: return (35, 52, 18, 42)
         case .topDown: return (35, 78, 24, 40)
-        case .outer: return (35, 30, 38, 42)
+        case .outer: return (35, 52, 38, 42)
         }
     }
 }
@@ -179,7 +179,7 @@ final class StudioState: ObservableObject {
     @Published var bhDoppler: Bool = true
     @Published var bhJets: Bool = false
     @Published var bhSoftness: Double = 3.0
-    @Published var bhThickness: Double = 0.25
+    @Published var bhThickness: Double = 0.1
 
     // Solar system
     @Published var solarPlanetScale: Double = 1.7
@@ -283,7 +283,7 @@ final class StudioState: ObservableObject {
         if ProcessInfo.processInfo.arguments.contains("--solar") {
             mode = .solarSystem
             azimuth = 35
-            elevation = 28
+            elevation = 52
             distance = 18
             fov = 42
             autoRotate = true
@@ -341,7 +341,7 @@ final class StudioState: ObservableObject {
             rotationSpeed = 6
         } else if newMode == .solarSystem {
             azimuth = 35
-            elevation = 28
+            elevation = 52
             distance = 18
             fov = 42
             autoRotate = true
@@ -427,8 +427,16 @@ final class StudioState: ObservableObject {
         distance = SolarSystem.focusDistance(clamped, days: simulationTime,
                                              scale: solarPlanetScale)
         fov = 34
-        elevation = 24
-        azimuth = 35
+        if clamped == 0 {
+            elevation = 24
+            azimuth = 35
+        } else {
+            // Put the camera on the sunward side of the planet so the local
+            // view starts with a mostly full-lit disk (small phase angle).
+            let angles = SolarSystem.focusCameraAngles(clamped, days: simulationTime)
+            azimuth = angles.azimuth
+            elevation = angles.elevation
+        }
         showIntroOverlay = false
     }
 
@@ -436,7 +444,7 @@ final class StudioState: ObservableObject {
         guard mode == .solarSystem else { return }
         solarFocus = -1
         azimuth = 35
-        elevation = 28
+        elevation = 52
         distance = 18
         fov = 42
     }
@@ -510,7 +518,7 @@ final class StudioState: ObservableObject {
         case .solarSystem:
             solarFocus = -1
             azimuth = 35
-            elevation = 28
+            elevation = 52
             distance = 18
             fov = 42
         case .blackHole:

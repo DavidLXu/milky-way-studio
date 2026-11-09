@@ -536,7 +536,7 @@ struct SidebarView: View {
                               format: { String(format: "%.0f Rs", $0) })
                 LabeledSlider(title: "盘厚度",
                               value: $state.bhThickness,
-                              range: 0.1...1.5,
+                              range: 0.05...1.5,
                               format: { String(format: "%.2f×", $0) })
                 LabeledSlider(title: "曝光",
                               value: $state.bhExposure,
@@ -924,6 +924,7 @@ struct SolarLabelsOverlay: View {
 
         var projected: [Projected] = []
         for i in 0..<min(9, bodies.count) {
+            if state.solarFocus > 0 && i != state.solarFocus - 1 { continue }
             let p = bodies[i].posRadius
             if let item = project(SIMD4<Float>(p.x, p.y, p.z, p.w), index: i) {
                 projected.append(item)
