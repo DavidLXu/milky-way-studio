@@ -838,46 +838,189 @@ struct SidebarView: View {
 
 // MARK: - Solar labels
 
+private struct SolarLabelItem: Identifiable {
+    let id: Int
+    let text: String
+    let color: Color
+    let center: CGPoint
+    let anchor: CGPoint
+    let lineEnd: CGPoint
+}
+
 struct SolarLabelsOverlay: View {
     @ObservedObject var state: StudioState
 
     var body: some View {
         GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            let aspect = max(0.2, Double(w / max(h, 1)))
-            let settings = state.renderSettings
-            let camera = CameraBasis.make(settings: settings, aspect: aspect)
-            let bodies = SolarSystem.renderPlanets(days: state.simulationTime,
-                                                   scale: state.solarPlanetScale)
+            let items = makeItems(size: geo.size)
             ZStack(alignment: .topLeading) {
-                ForEach(0..<min(bodies.count, SolarSystem.names.count), id: \.self) { i in
-                    let p = bodies[i].posRadius
-                    let world = SIMD3<Float>(p.x, p.y, p.z)
-                    let d = world - camera.position
-                    let depth = simd_dot(d, camera.forward)
-                    if depth > 0.15 {
-                        let nx = simd_dot(d, camera.right) / (depth * camera.tanHalfFov * Float(aspect))
-                        let ny = simd_dot(d, camera.up) / (depth * camera.tanHalfFov)
-                        let sx = CGFloat((nx * 0.5 + 0.5)) * w
-                        let sy = CGFloat((0.5 - ny * 0.5)) * h
-                        if sx > 8 && sx < w - 8 && sy > 8 && sy < h - 8 {
-                            let color = Color(red: Double(bodies[i].color.x),
-                                              green: Double(bodies[i].color.y),
-                                              blue: Double(bodies[i].color.z))
-                            HStack(spacing: 4) {
-                                Circle().fill(color).frame(width: 3, height: 3)
-                                Text(SolarSystem.names[i])
-                                    .font(.system(size: 8.5, weight: .medium, design: .monospaced))
-                                    .foregroundColor(.white.opacity(0.66))
-                            }
-                            .shadow(color: .black.opacity(0.8), radius: 2)
-                            .position(x: sx + 22, y: sy - 9)
-                        }
+                Canvas { context, _ in
+                    for item in items {
+                        var path = Path()
+                        path.move(to: item.anchor)
+                        path.addLine(to: item.lineEnd)
+                        context.stroke(path, with: .color(.white.opacity(0.16)), lineWidth: 0.6)
                     }
+                }
+                .allowsHitTesting(false)
+
+                ForEach(items) { item in
+                    HStack(spacing: 4) {
+                        Circle().fill(item.color).frame(width: 3, height: 3)
+                        Text(item.text)
+                            .font(.system(size: 8.5, weight: .medium, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.72))
+                            .fixedSize()
+                    }
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(.black.opacity(0.28)))
+                    .overlay(Capsule().stroke(.white.opacity(0.06), lineWidth: 0.5))
+                    .shadow(color: .black.opacity(0.8), radius: 2)
+                    .position(item.center)
                 }
             }
         }
+        .allowsHitTesting(false)
+    }
+
+    private func makeItems(size: CGSize) -> [SolarLabelItem] {
+        let w = size.width
+        let h = size.height
+        guard w > 10, h > 10 else { return [] }
+        let aspect = max(0.2, Double(w / h))
+        var settings = state.renderSettings
+        settings.time = state.simulationTime
+        let camera = CameraBasis.make(settings: settings, aspect: aspect)
+        let bodies = SolarSystem.renderPlanets(days: state.simulationTime,
+                                               scale: state.solarPlanetScale)
+
+        struct Projected {
+            let index: Int
+            let screen: CGPoint
+            let radius: CGFloat
+            let color: Color
+        }
+
+        func project(_ p: SIMD4<Float>, index: Int) -> Projected? {
+            let d = SIMD3<Float>(p.x, p.y, p.z) - camera.position
+            let depth = Double(simd_dot(d, camera.forward))
+            guard depth > 0.05 else { return nil }
+            let nx = Double(simd_dot(d, camera.right)) /
+                     (depth * Double(camera.tanHalfFov) * aspect)
+            let ny = Double(simd_dot(d, camera.up)) /
+                     (depth * Double(camera.tanHalfFov))
+            let sx = (nx * 0.5 + 0.5) * w
+            let sy = (0.5 - ny * 0.5) * h
+            guard sx > -42, sx < w + 42, sy > -42, sy < h + 42 else { return nil }
+            let radius = CGFloat(Double(p.w) /
+                                 (depth * Double(camera.tanHalfFov)) * h * 0.5)
+            let c = bodies[index].color
+            return Projected(index: index,
+                             screen: CGPoint(x: sx, y: sy),
+                             radius: max(1.5, radius),
+                             color: Color(red: Double(c.x), green: Double(c.y), blue: Double(c.z)))
+        }
+
+        var projected: [Projected] = []
+        for i in 0..<min(9, bodies.count) {
+            let p = bodies[i].posRadius
+            if let item = project(SIMD4<Float>(p.x, p.y, p.z, p.w), index: i) {
+                projected.append(item)
+            }
+        }
+
+        // Sun disk, used to keep labels away from the solar surface as well.
+        let sunDisk: (CGPoint, CGFloat)? = {
+            let d = SIMD3<Float>(0, 0, 0) - camera.position
+            let depth = Double(simd_dot(d, camera.forward))
+            guard depth > 0.05 else { return nil }
+            let nx = Double(simd_dot(d, camera.right)) /
+                     (depth * Double(camera.tanHalfFov) * aspect)
+            let ny = Double(simd_dot(d, camera.up)) /
+                     (depth * Double(camera.tanHalfFov))
+            let sx = (nx * 0.5 + 0.5) * w
+            let sy = (0.5 - ny * 0.5) * h
+            let radius = CGFloat(Double(SolarSystem.sunVisualRadius) /
+                                 (depth * Double(camera.tanHalfFov)) * h * 0.5)
+            return (CGPoint(x: sx, y: sy), max(2, radius))
+        }()
+
+        func intersectsCircle(_ rect: CGRect, center: CGPoint, radius: CGFloat) -> Bool {
+            let nx = min(max(center.x, rect.minX), rect.maxX)
+            let ny = min(max(center.y, rect.minY), rect.maxY)
+            return hypot(center.x - nx, center.y - ny) < radius + 3
+        }
+
+        var occupied: [CGRect] = []
+        var items: [SolarLabelItem] = []
+
+        for (order, body) in projected.enumerated() {
+            let text = SolarSystem.names[body.index]
+            let estimatedWidth = CGFloat(text.count) * 9.5 + 18
+            let halfW = estimatedWidth * 0.5
+            let labelHalfH: CGFloat = 8
+            let gap: CGFloat = 12
+
+            let rightFits = body.screen.x + body.radius + gap + estimatedWidth + 8 < w
+            let side: CGFloat = rightFits ? 1 : -1
+            var cx = body.screen.x + side * (body.radius + gap + halfW)
+            var cy = body.screen.y - 4
+
+            // Keep the label inside the viewport.
+            cx = min(max(cx, halfW + 6), w - halfW - 6)
+            cy = min(max(cy, labelHalfH + 6), h - labelHalfH - 6)
+
+            let verticalOffsets: [CGFloat] = [0, -18, 18, -36, 36, -54, 54, -72, 72]
+            var chosen = CGRect(x: cx - halfW, y: cy - labelHalfH,
+                                width: estimatedWidth, height: labelHalfH * 2)
+            for dy in verticalOffsets {
+                let candidateY = min(max(cy + dy, labelHalfH + 6), h - labelHalfH - 6)
+                let candidate = CGRect(x: cx - halfW, y: candidateY - labelHalfH,
+                                       width: estimatedWidth, height: labelHalfH * 2)
+                var bad = false
+                for other in projected where other.index != body.index {
+                    if intersectsCircle(candidate, center: other.screen, radius: other.radius) {
+                        bad = true
+                        break
+                    }
+                }
+                if !bad, let sunDisk, intersectsCircle(candidate, center: sunDisk.0, radius: sunDisk.1) {
+                    bad = true
+                }
+                if !bad {
+                    for rect in occupied where rect.intersects(candidate) {
+                        bad = true
+                        break
+                    }
+                }
+                if !bad {
+                    chosen = candidate
+                    cy = candidateY
+                    break
+                }
+            }
+            occupied.append(chosen.insetBy(dx: -2, dy: -2))
+
+            // Leader line from the planet's limb to the nearest label edge.
+            let dirX = cx - body.screen.x
+            let dirY = cy - body.screen.y
+            let len = max(1.0, hypot(dirX, dirY))
+            let ux = dirX / len
+            let uy = dirY / len
+            let anchor = CGPoint(x: body.screen.x + ux * (body.radius + 1.5),
+                                 y: body.screen.y + uy * (body.radius + 1.5))
+            let lineEnd = CGPoint(x: cx - ux * (halfW + 1),
+                                  y: cy - uy * (labelHalfH + 1))
+            items.append(SolarLabelItem(id: body.index,
+                                        text: text,
+                                        color: body.color,
+                                        center: CGPoint(x: cx, y: cy),
+                                        anchor: anchor,
+                                        lineEnd: lineEnd))
+            _ = order
+        }
+        return items
     }
 }
 
