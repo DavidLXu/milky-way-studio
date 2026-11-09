@@ -3,5 +3,4 @@ build/cache/
 .DS_Store
 *.o
 *.dSYM/
-BlackHole*
-Screenshot_BlackHole*
+Screenshot_
