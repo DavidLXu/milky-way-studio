@@ -8,6 +8,20 @@
 
 ![Milky Way Studio](MilkyWay_4K_preview.jpg)
 
+## 下载
+
+[**GitHub Release v4.0.0**](https://github.com/DavidLXu/milky-way-studio/releases/tag/v4.0.0) 提供：
+
+- `MilkyWayStudio-4.0.0-arm64.dmg`：拖入 Applications 安装；
+- `MilkyWayStudio-4.0.0-arm64.zip`：压缩的 `.app`。
+
+要求 macOS 14+ / Apple Silicon。构建为 ad-hoc 签名，未经过 Apple 公证；首次启动请右键 → 打开，或执行：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Milky Way Studio.app"
+```
+
+
 ## 1. 技术选择：为什么是 Metal + 体积渲染？
 
 **SwiftUI + Metal 4** 是这台 Mac 上最合适的一组：
