@@ -2,7 +2,7 @@
 
 一个在 Mac 本地运行的程序化银河系渲染器。目标不是做一张“星空插画”，而是用可解释的星系结构模型，在 Metal 上实时预览、并渐进累积出高分辨率静帧。
 
-当前版本（v3）在 v2 的体积渲染、星粒子、高清尘埃和受限 N-body 之上，加入了一个可切换的**黑洞模式**：Schwarzschild 零测地线追踪、相对论薄吸积盘、引力红移、多普勒 beaming、光子环和背景星光透镜。左上角的 `MILKY WAY / BLACK HOLE` 开关用于切换两个场景。
+当前版本（v4.1）包含四个场景：银河系体积渲染、Schwarzschild 黑洞、J2000 太阳系，以及可手动搭建的**引力沙盒**。左上角的 `MILKY WAY / BLACK HOLE / SOLAR SYSTEM / SANDBOX` 用于切换。
 
 ![Black Hole](BlackHole_4K_preview.jpg)
 
@@ -10,10 +10,12 @@
 
 ## 下载
 
-[**GitHub Release v4.0.0**](https://github.com/DavidLXu/milky-way-studio/releases/tag/v4.0.0) 提供：
+[**GitHub Release v4.1.0**](https://github.com/DavidLXu/milky-way-studio/releases/tag/v4.1.0) 提供：
 
-- `MilkyWayStudio-4.0.0-arm64.dmg`：拖入 Applications 安装；
-- `MilkyWayStudio-4.0.0-arm64.zip`：压缩的 `.app`。
+- `MilkyWayStudio-4.1.0-arm64.dmg`：拖入 Applications 安装；
+- `MilkyWayStudio-4.1.0-arm64.zip`：压缩的 `.app`。
+
+v4.1.0 新增 **SANDBOX** 引力沙盒：拖入星球、设置质量、拖出初速度，并实时计算所有天体之间的 N-body 引力。
 
 要求 macOS 14+ / Apple Silicon。构建为 ad-hoc 签名，未经过 Apple 公证；首次启动请右键 → 打开，或执行：
 

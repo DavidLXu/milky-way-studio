@@ -771,22 +771,27 @@ struct SidebarView: View {
     }
 
     private var footer: some View {
-        HStack {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(state.mode == .custom ? Palette.blue :
-                          (state.isReady ? Color(red: 0.45, green: 0.78, blue: 0.55) : Palette.amber))
-                    .frame(width: 4, height: 4)
-                Text(state.mode == .custom ? "N-BODY" : (state.isReady ? "METAL 4" : "BUILDING"))
-                    .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                    .tracking(0.9)
+        Group {
+            if state.mode == .custom {
+                SandboxFooter(sandbox: state.sandbox)
+            } else {
+                HStack {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(state.isReady ? Color(red: 0.45, green: 0.78, blue: 0.55) : Palette.amber)
+                            .frame(width: 4, height: 4)
+                        Text(state.isReady ? "METAL 4" : "BUILDING")
+                            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                            .tracking(0.9)
+                    }
+                    Spacer()
+                    Text("640³ VOLUME")
+                        .font(.system(size: 8, design: .monospaced))
+                        .tracking(0.6)
+                }
+                .foregroundColor(Palette.faint)
             }
-            Spacer()
-            Text(state.mode == .custom ? "\(state.sandbox.bodies.count) BODIES · O(N²)" : "640³ VOLUME")
-                .font(.system(size: 8, design: .monospaced))
-                .tracking(0.6)
         }
-        .foregroundColor(Palette.faint)
     }
 
     private var resolutionTitle: String {
@@ -1158,9 +1163,13 @@ struct ViewportView: View {
 
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(state.cameraSummary)
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.52))
+                        if state.mode == .custom {
+                            SandboxCameraSummary(sandbox: state.sandbox)
+                        } else {
+                            Text(state.cameraSummary)
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.52))
+                        }
                         Text(state.mode == .custom ?
                              "DRAG BODIES   ·   VELOCITY TOOL FOR VECTORS   ·   PLAY IN THE SIDEBAR" :
                              "DRAG TO ORBIT   ·   SCROLL TO ZOOM   ·   SPACE TO PAUSE")

@@ -524,3 +524,33 @@ struct SandboxStatusPill: View {
             .foregroundColor(.white.opacity(0.52))
     }
 }
+
+struct SandboxFooter: View {
+    @ObservedObject var sandbox: GravitySandbox
+
+    var body: some View {
+        HStack {
+            HStack(spacing: 6) {
+                Circle().fill(Palette.blue).frame(width: 4, height: 4)
+                Text("N-BODY")
+                    .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                    .tracking(0.9)
+            }
+            Spacer()
+            Text("\(sandbox.bodies.count) BODIES · O(N²)")
+                .font(.system(size: 8, design: .monospaced))
+                .tracking(0.6)
+        }
+        .foregroundColor(Palette.faint)
+    }
+}
+
+struct SandboxCameraSummary: View {
+    @ObservedObject var sandbox: GravitySandbox
+
+    var body: some View {
+        Text("N-BODY · ALL-PAIRS · \(sandbox.bodies.count) BODIES")
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundColor(.white.opacity(0.52))
+    }
+}
