@@ -147,6 +147,7 @@ enum SolarPreset: String, CaseIterable, Identifiable {
 
 final class StudioState: ObservableObject {
     @Published var mode: SceneMode = .galaxy
+    let sandbox = GravitySandbox()
 
     // Camera
     @Published var azimuth: Double = 34
@@ -266,6 +267,13 @@ final class StudioState: ObservableObject {
             s.previewScale = previewQuality.scale
             s.previewSamples = 64
             s.previewSPP = 2
+        } else if mode == .custom {
+            s.starLayerEnabled = false
+            s.dustHighEnabled = false
+            s.exposure = 0
+            s.bloom = 0
+            s.steps = 32
+            s.previewScale = previewQuality.scale
         } else {
             s.starLayerEnabled = starLayerEnabled
             s.dustHighEnabled = dustHighEnabled && !autoRotate
@@ -280,7 +288,14 @@ final class StudioState: ObservableObject {
     }
 
     init() {
-        if ProcessInfo.processInfo.arguments.contains("--solar") {
+        if ProcessInfo.processInfo.arguments.contains("--sandbox") {
+            mode = .custom
+            showIntroOverlay = false
+            autoRotate = false
+            if ProcessInfo.processInfo.arguments.contains("--example") {
+                sandbox.loadExample()
+            }
+        } else if ProcessInfo.processInfo.arguments.contains("--solar") {
             mode = .solarSystem
             azimuth = 35
             elevation = 52
@@ -307,6 +322,9 @@ final class StudioState: ObservableObject {
             return String(format: "%02.0f° / %02.0f°  ·  %.0f Rs  ·  %.0f° FOV",
                           azimuth, elevation, distance, fov)
         }
+        if mode == .custom {
+            return String(format: "N-BODY · ALL-PAIRS · %d BODIES", sandbox.bodies.count)
+        }
         if mode == .solarSystem {
             if solarFocus >= 0 {
                 return String(format: "%@  ·  %.2f AU  ·  %.0f° FOV",
@@ -332,7 +350,9 @@ final class StudioState: ObservableObject {
         guard mode != newMode else { return }
         mode = newMode
         solarFocus = -1
-        if newMode == .blackHole {
+        if newMode == .custom {
+            autoRotate = false
+        } else if newMode == .blackHole {
             azimuth = 34
             elevation = 6
             distance = 27
@@ -403,6 +423,9 @@ final class StudioState: ObservableObject {
         let lower: Double
         let upper: Double
         switch mode {
+        case .custom:
+            lower = 8
+            upper = 92
         case .solarSystem:
             lower = 0.02
             upper = 62
@@ -515,6 +538,8 @@ final class StudioState: ObservableObject {
 
     func resetCamera() {
         switch mode {
+        case .custom:
+            break
         case .solarSystem:
             solarFocus = -1
             azimuth = 35

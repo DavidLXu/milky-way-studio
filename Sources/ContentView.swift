@@ -39,6 +39,10 @@ struct ContentView: View {
     }
 
     private func presentRenderPanel() {
+        guard state.mode != .custom else {
+            state.statusMessage = "沙盒模式请使用工具栏的播放/暂停；导出功能稍后接入"
+            return
+        }
         let panel = NSSavePanel()
         panel.title = "渲染银河最终帧"
         panel.message = "16-bit PNG · 渐进式超采样 · 当前视角"
@@ -85,6 +89,8 @@ struct SidebarView: View {
                     } else if state.mode == .solarSystem {
                         solarViewSection
                         solarSection
+                    } else if state.mode == .custom {
+                        SandboxSidebar(sandbox: state.sandbox)
                     } else {
                         viewSection
                         galaxySection
@@ -95,7 +101,9 @@ struct SidebarView: View {
                 .padding(.bottom, 14)
             }
 
-            renderActionBar
+            if state.mode != .custom {
+                renderActionBar
+            }
 
             footer
                 .padding(.horizontal, 22)
@@ -116,11 +124,13 @@ struct SidebarView: View {
             GalaxyMark(scale: 0.92)
             VStack(alignment: .leading, spacing: 2) {
                 Text(state.mode == .blackHole ? "Event Horizon" :
-                     (state.mode == .solarSystem ? "Solar System" : "Milky Way"))
+                     (state.mode == .solarSystem ? "Solar System" :
+                      (state.mode == .custom ? "Gravity Lab" : "Milky Way")))
                     .font(.system(size: 24, weight: .light, design: .serif))
                     .foregroundColor(Palette.ink)
                 Text(state.mode == .blackHole ? "SCHWARZSCHILD RAY TRACER" :
-                     (state.mode == .solarSystem ? "KEPLERIAN ORRERY" : "GALACTIC VOLUME RENDERER"))
+                     (state.mode == .solarSystem ? "KEPLERIAN ORRERY" :
+                      (state.mode == .custom ? "N-BODY GRAVITY SANDBOX" : "GALACTIC VOLUME RENDERER")))
                     .font(.system(size: 8, weight: .semibold, design: .monospaced))
                     .tracking(1.55)
                     .foregroundColor(Palette.dim)
@@ -764,14 +774,15 @@ struct SidebarView: View {
         HStack {
             HStack(spacing: 6) {
                 Circle()
-                    .fill(state.isReady ? Color(red: 0.45, green: 0.78, blue: 0.55) : Palette.amber)
+                    .fill(state.mode == .custom ? Palette.blue :
+                          (state.isReady ? Color(red: 0.45, green: 0.78, blue: 0.55) : Palette.amber))
                     .frame(width: 4, height: 4)
-                Text(state.isReady ? "METAL 4" : "BUILDING")
+                Text(state.mode == .custom ? "N-BODY" : (state.isReady ? "METAL 4" : "BUILDING"))
                     .font(.system(size: 8, weight: .semibold, design: .monospaced))
                     .tracking(0.9)
             }
             Spacer()
-            Text("640³ VOLUME")
+            Text(state.mode == .custom ? "\(state.sandbox.bodies.count) BODIES · O(N²)" : "640³ VOLUME")
                 .font(.system(size: 8, design: .monospaced))
                 .tracking(0.6)
         }
@@ -1034,8 +1045,13 @@ struct ViewportView: View {
         ZStack {
             Color.black
 
-            MetalViewport(state: state)
-                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            if state.mode == .custom {
+                SandboxView(sandbox: state.sandbox)
+                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            } else {
+                MetalViewport(state: state)
+                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            }
 
             if state.mode == .solarSystem {
                 SolarLabelsOverlay(state: state)
@@ -1100,11 +1116,15 @@ struct ViewportView: View {
                             ModePill(title: "SOLAR SYSTEM", active: state.mode == .solarSystem) {
                                 state.switchMode(.solarSystem)
                             }
+                            ModePill(title: "SANDBOX", active: state.mode == .custom) {
+                                state.switchMode(.custom)
+                            }
                         }
                         HStack(spacing: 7) {
                             Circle().fill(Palette.amber).frame(width: 4, height: 4)
                             Text(state.mode == .blackHole ? "EVENT HORIZON" :
-                                 (state.mode == .solarSystem ? "HELIOCENTRIC" : "MILKY WAY"))
+                                 (state.mode == .solarSystem ? "HELIOCENTRIC" :
+                                  (state.mode == .custom ? "CUSTOM N-BODY" : "MILKY WAY")))
                                 .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
                                 .tracking(2.2)
                                 .foregroundColor(Palette.ink.opacity(0.86))
@@ -1114,7 +1134,9 @@ struct ViewportView: View {
                              "SCHWARZSCHILD  /  ACCRETION DISK" :
                              (state.mode == .solarSystem ?
                               "J2000  /  KEPLERIAN PLANETARY ORBITS" :
-                              "M-01  /  DENSITY-WAVE BARRED SPIRAL"))
+                              (state.mode == .custom ?
+                               "ALL-PAIRS NEWTONIAN GRAVITY" :
+                               "M-01  /  DENSITY-WAVE BARRED SPIRAL")))
                             .font(.system(size: 8, design: .monospaced))
                             .tracking(1.1)
                             .foregroundColor(.white.opacity(0.38))
@@ -1139,7 +1161,9 @@ struct ViewportView: View {
                         Text(state.cameraSummary)
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(.white.opacity(0.52))
-                        Text("DRAG TO ORBIT   ·   SCROLL TO ZOOM   ·   SPACE TO PAUSE")
+                        Text(state.mode == .custom ?
+                             "DRAG BODIES   ·   VELOCITY TOOL FOR VECTORS   ·   PLAY IN THE SIDEBAR" :
+                             "DRAG TO ORBIT   ·   SCROLL TO ZOOM   ·   SPACE TO PAUSE")
                             .font(.system(size: 7.5, design: .monospaced))
                             .tracking(0.9)
                             .foregroundColor(.white.opacity(0.25))
@@ -1151,7 +1175,7 @@ struct ViewportView: View {
                 .padding(.bottom, 20)
             }
 
-            if !state.isReady {
+            if !state.isReady && state.mode != .custom {
                 loadingOverlay
             }
 
@@ -1201,6 +1225,8 @@ struct ViewportView: View {
                     .font(.system(size: 8, weight: .semibold, design: .monospaced))
                     .tracking(0.9)
                     .foregroundColor(.white.opacity(0.72))
+            } else if state.mode == .custom {
+                SandboxStatusPill(sandbox: state.sandbox)
             } else {
                 Text("LIVE  \(Int(state.previewFPS)) FPS  ·  \(state.previewWidth)×\(state.previewHeight)  ·  \(state.previewSamples) spp")
                     .font(.system(size: 8, weight: .medium, design: .monospaced))

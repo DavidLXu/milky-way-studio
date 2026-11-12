@@ -40,6 +40,7 @@ enum SceneMode: String, CaseIterable, Identifiable {
     case galaxy
     case blackHole
     case solarSystem
+    case custom
 
     var id: String { rawValue }
     var title: String {
@@ -47,6 +48,7 @@ enum SceneMode: String, CaseIterable, Identifiable {
         case .galaxy: return "MILKY WAY"
         case .blackHole: return "BLACK HOLE"
         case .solarSystem: return "SOLAR SYSTEM"
+        case .custom: return "SANDBOX"
         }
     }
 }
@@ -182,6 +184,7 @@ struct CameraBasis {
         case .galaxy: minimumDistance = 24.0
         case .blackHole: minimumDistance = 8.0
         case .solarSystem: minimumDistance = 0.02
+        case .custom: minimumDistance = 8.0
         }
         let d = max(minimumDistance, settings.distance)
 

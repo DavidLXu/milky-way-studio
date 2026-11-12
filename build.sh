@@ -19,6 +19,8 @@ swiftc -O -whole-module-optimization -parse-as-library -swift-version 5 \
   Sources/Palette.swift \
   Sources/AstroModel.swift \
   Sources/SolarSystem.swift \
+  Sources/GravitySandbox.swift \
+  Sources/SandboxView.swift \
   Sources/ShaderTypes.swift \
   Sources/GalaxyEngine.swift \
   Sources/ImageExporter.swift \
