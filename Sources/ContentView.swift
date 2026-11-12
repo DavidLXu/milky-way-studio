@@ -1162,20 +1162,16 @@ struct ViewportView: View {
                 Spacer()
 
                 HStack(alignment: .bottom) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if state.mode == .custom {
-                            SandboxCameraSummary(sandbox: state.sandbox)
-                        } else {
+                    if state.mode != .custom {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(state.cameraSummary)
                                 .font(.system(size: 9, design: .monospaced))
                                 .foregroundColor(.white.opacity(0.52))
+                            Text("DRAG TO ORBIT   ·   SCROLL TO ZOOM   ·   SPACE TO PAUSE")
+                                .font(.system(size: 7.5, design: .monospaced))
+                                .tracking(0.9)
+                                .foregroundColor(.white.opacity(0.25))
                         }
-                        Text(state.mode == .custom ?
-                             "DRAG BODIES   ·   VELOCITY TOOL FOR VECTORS   ·   PLAY IN THE SIDEBAR" :
-                             "DRAG TO ORBIT   ·   SCROLL TO ZOOM   ·   SPACE TO PAUSE")
-                            .font(.system(size: 7.5, design: .monospaced))
-                            .tracking(0.9)
-                            .foregroundColor(.white.opacity(0.25))
                     }
                     Spacer()
                     statusPill

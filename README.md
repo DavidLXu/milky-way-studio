@@ -172,6 +172,8 @@ xattr -dr com.apple.quarantine "/Applications/Milky Way Studio.app"
 
 左上角 `SANDBOX` 是第四个场景：一个可手动搭建的二维牛顿引力沙盒。
 
+![Gravity sandbox](Sandbox_UI_preview.jpg)
+
 ### 搭建
 
 - 从侧栏 **BODY PALETTE** 把恒星、岩石行星、气态巨行星或黑洞拖进画布；

@@ -72,7 +72,7 @@ struct SandboxView: View {
                             .foregroundColor(.white.opacity(0.24))
                     }
                 }
-                .padding(.top, 90)
+                .padding(.top, 112)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 20)
                 .allowsHitTesting(false)
